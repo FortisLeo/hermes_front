@@ -474,5 +474,53 @@
  "403": {
   "cmd": "pm path com.rishitgoklani.hermes_front_mobile && dumpsys package com.rishitgoklani.hermes_front_mobi",
   "ok": true
+ },
+ "11": {
+  "cmd": "settings list global | head -3; settings list secure | head -3",
+  "ok": true
+ },
+ "20": {
+  "cmd": "pm resolve-activity -a android.settings.SETTINGS | head -3",
+  "ok": true
+ },
+ "39": {
+  "cmd": "dumpsys accessibility | grep -c Event; echo rc=0",
+  "ok": true
+ },
+ "68": {
+  "cmd": "wm size; dumpsys display | grep -m1 -i cutout; settings get system user_rotation",
+  "ok": true
+ },
+ "149": {
+  "cmd": "dumpsys alarm | head -3",
+  "ok": true
+ },
+ "156": {
+  "cmd": "dumpsys thermalservice | head -5",
+  "ok": true
+ },
+ "159": {
+  "cmd": "dumpsys battery | grep -E 'level|status'; settings get global low_power",
+  "ok": true
+ },
+ "160": {
+  "cmd": "dumpsys batterystats | head -2; cat /sys/class/power_supply/battery/cycle_count",
+  "ok": true
+ },
+ "179": {
+  "cmd": "cat /proc/net/dev | head -4",
+  "ok": true
+ },
+ "196": {
+  "cmd": "grep -c shell /data/data/com.rishitgoklani.hermes_front_mobile/files/audit.log; echo rc=0",
+  "ok": true
+ },
+ "200": {
+  "cmd": "tail -n 3 /data/data/com.rishitgoklani.hermes_front_mobile/files/audit.log | cut -c1-60",
+  "ok": true
+ },
+ "233": {
+  "cmd": "pm list packages | grep -i chrome | head -1",
+  "ok": true
  }
 }

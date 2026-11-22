@@ -54,7 +54,7 @@ CASES = {
  403: "pm path com.rishitgoklani.hermes_front_mobile && dumpsys package com.rishitgoklani.hermes_front_mobile | grep -m1 lastUpdateTime",
  11: "settings list global | head -3; settings list secure | head -3", 68: "wm size; dumpsys display | grep -m1 -i cutout; settings get system user_rotation",
  156: "dumpsys thermalservice | head -5", 159: "dumpsys battery | grep -E 'level|status'; settings get global low_power",
- 160: "dumpsys batterystats --charged | grep -m2 -i 'statistics since\\|estimated'", 179: "cat /proc/net/dev | head -4",
+ 160: "dumpsys batterystats | head -2; cat /sys/class/power_supply/battery/cycle_count", 179: "cat /proc/net/dev | head -4",
  149: "dumpsys alarm | head -3", 39: "dumpsys accessibility | grep -c Event; echo rc=0", 20: "pm resolve-activity -a android.settings.SETTINGS | head -3",
  233: "pm list packages | grep -i chrome | head -1", 200: "tail -n 3 /data/data/com.rishitgoklani.hermes_front_mobile/files/audit.log | cut -c1-60",
  196: "grep -c shell /data/data/com.rishitgoklani.hermes_front_mobile/files/audit.log; echo rc=0",
@@ -71,9 +71,14 @@ def run(cmd):
     bad = any(b in msg for b in ("No such file", "not found", "Permission denied", "Unknown command", "inaccessible"))
     return r.get("status") == "completed" and not bad and msg.strip() != "", msg[:120].replace("\n", " | ")
 
-results = {}
+results = json.load(open(f"{root}/docs/recipe-verification.json")) if os.path.exists(f"{root}/docs/recipe-verification.json") else {}
+# bridge must be up, otherwise every case fails and would overwrite good results
+ok0, out0 = run("echo up")
+if not ok0: sys.exit("bridge is down (" + out0 + "): not touching docs/recipe-verification.json")
 for n, cmd in sorted(CASES.items()):
-    ok, out = run(cmd); results[str(n)] = {"cmd": cmd[:100], "ok": ok}  # raw output is deliberately not stored (it can contain network/personal details)
+    ok, out = run(cmd)
+    if out.startswith("nc:"): print("SKIP (bridge error)", n); continue  # transport failure is not a verdict
+    results[str(n)] = {"cmd": cmd[:100], "ok": ok}  # raw output is deliberately not stored (it can contain network/personal details)
     print(("PASS" if ok else "FAIL"), n, out[:70], flush=True)
 json.dump(results, open(f"{root}/docs/recipe-verification.json", "w"), indent=1)
 print(sum(v["ok"] for v in results.values()), "/", len(results), "passed")
