@@ -8,8 +8,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from './lib/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from './lib/three-vrm.module.min.js';
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
+renderer.setPixelRatio(1);  // this phone has 3.5 GB RAM; full-res WebGL gets the app killed under memory pressure
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05070a);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
@@ -41,9 +41,12 @@ const bone = n => vrm?.humanoid?.getNormalizedBoneNode(n);
 function set(n, x, y, z) { const b = bone(n); if (b) b.rotation.set(x, y, z); }
 
 // Frame limit (heat/battery): 30 fps while something moves, 10 fps when idle and nothing is being said.
-let lastDraw = 0;
+let lastDraw = 0, hidden = false;
+document.addEventListener('visibilitychange', () => { hidden = document.hidden; });
+window.avatar.pause = v => { hidden = v; };
 function frame(now) {
   requestAnimationFrame(frame);
+  if (hidden) return;
   const busy = st.action !== 'idle' || st.mouth > 0.02 || st.bounce > 0.5;
   if (now - lastDraw < (busy ? 1000 / 30 : 1000 / 10) - 2) return;
   lastDraw = now;

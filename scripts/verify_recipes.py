@@ -52,6 +52,12 @@ CASES = {
  388: "OLD=$(settings get system haptic_feedback_enabled); settings put system haptic_feedback_enabled 0; N=$(settings get system haptic_feedback_enabled); settings put system haptic_feedback_enabled $OLD; echo changed_to=$N restored_to=$(settings get system haptic_feedback_enabled)",
  12: "OLD=$(settings get system screen_off_timeout); settings put system screen_off_timeout 600000; N=$(settings get system screen_off_timeout); settings put system screen_off_timeout $OLD; echo set=$N restored=$(settings get system screen_off_timeout)",
  403: "pm path com.rishitgoklani.hermes_front_mobile && dumpsys package com.rishitgoklani.hermes_front_mobile | grep -m1 lastUpdateTime",
+ 11: "settings list global | head -3; settings list secure | head -3", 68: "wm size; dumpsys display | grep -m1 -i cutout; settings get system user_rotation",
+ 156: "dumpsys thermalservice | head -5", 159: "dumpsys battery | grep -E 'level|status'; settings get global low_power",
+ 160: "dumpsys batterystats --charged | grep -m2 -i 'statistics since\\|estimated'", 179: "cat /proc/net/dev | head -4",
+ 149: "dumpsys alarm | head -3", 39: "dumpsys accessibility | grep -c Event; echo rc=0", 20: "pm resolve-activity -a android.settings.SETTINGS | head -3",
+ 233: "pm list packages | grep -i chrome | head -1", 200: "tail -n 3 /data/data/com.rishitgoklani.hermes_front_mobile/files/audit.log | cut -c1-60",
+ 196: "grep -c shell /data/data/com.rishitgoklani.hermes_front_mobile/files/audit.log; echo rc=0",
  123: "settings get secure tts_default_rate", 138: "ls /sdcard/Pictures | head -2; echo rc=0", 14.5: "true",
 }
 CASES.pop(14.5)

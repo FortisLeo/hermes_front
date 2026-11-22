@@ -173,7 +173,11 @@ class AppContainer(private val app: Application) {
     private val greeter = com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) })
     private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     init {
+        // Avatar safety: if the process died twice in a row while the 3D avatar was on (the phone is memory-starved), fall back to the eyes face.
+        val d = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarSafety.onStart(prefs.getBoolean("avatar_mode", false), prefs.getInt("avatar_unclean", 0))
+        prefs.edit().putBoolean("avatar_mode", d.avatarOn).putInt("avatar_unclean", d.uncleanCount).apply()
         avatar.setEnabled(prefs.getBoolean("avatar_mode", false))
+        scope.launch { kotlinx.coroutines.delay(60_000); prefs.edit().putInt("avatar_unclean", 0).apply() }
         scope.launch { avatar.state.collect { prefs.edit().putBoolean("avatar_mode", it.enabled).apply() } }
         scope.launch { face.state.collect { avatar.setMood(it.mood); avatar.look(it.lookX, it.lookY) } }
         scope.launch { tts.openness.collect { avatar.setMouth(it) } }

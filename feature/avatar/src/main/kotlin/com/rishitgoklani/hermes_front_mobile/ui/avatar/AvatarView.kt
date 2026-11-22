@@ -63,5 +63,17 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
             }
         }
     }
+    // Stop drawing (and let the WebView idle) whenever the app is not in the foreground.
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.DisposableEffect(web) {
+        val owner = ctx as? androidx.lifecycle.LifecycleOwner
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            when (e) { androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> { web?.onPause(); web?.evaluateJavascript("window.avatar&&window.avatar.pause&&window.avatar.pause(true)", null) }
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> { web?.onResume(); web?.evaluateJavascript("window.avatar&&window.avatar.pause&&window.avatar.pause(false)", null) }
+                else -> {} }
+        }
+        owner?.lifecycle?.addObserver(obs)
+        onDispose { owner?.lifecycle?.removeObserver(obs) }
+    }
     LaunchedEffect(state, web) { web?.evaluateJavascript("window.avatar&&window.avatar.apply(${AvatarMapper.toJson(state)})", null) }
 }
