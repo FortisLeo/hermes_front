@@ -153,7 +153,7 @@ class AppContainer(private val app: Application) {
         AndroidFaceCounter(), kill, routines, ambient, selfChecks, a2ui,
         { surface -> _screenRequests.tryEmit(surface); runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
         Triple({ prefs.getBoolean("show_locked", false) }, { v: Boolean -> prefs.edit().putBoolean("show_locked", v).apply() }, { runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }),
-        macros, { runCapability }) { capabilitiesRef() })
+        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
     val engine = RoutineEngine(routines, runCapability, audit = audit)
@@ -168,6 +168,7 @@ class AppContainer(private val app: Application) {
     }
 
     private val placeTracker = com.rishitgoklani.hermes_front_mobile.domain.sense.PlaceTracker()
+    private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     private var sensing = false
     fun startSensing() {
         if (safeMode.value || sensing) return; sensing = true
@@ -175,6 +176,17 @@ class AppContainer(private val app: Application) {
             while (true) { kotlinx.coroutines.delay(120_000); val ps = places.all(); if (ps.isEmpty() || kill.isActive()) continue
                 locationOnce(app)?.let { (lat, lon) -> placeTracker.update(lat, lon, ps).forEach { engine.onEvent(it) } } }
         }
+        engine.observe { e ->
+            val sig = when (e) {
+                is DeviceEvent.FaceSeen -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Face
+                is DeviceEvent.Sound -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Sound
+                is DeviceEvent.Motion -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Motion
+                is DeviceEvent.VisualChange -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Visual
+                else -> null
+            }
+            sig?.let { s -> fusion.signal(s)?.let { p -> audit.record("presence", if (p.arrived) "arrived" else "departed", "event"); scope.launch { engine.onEvent(p) } } }
+        }
+        scope.launch { while (true) { kotlinx.coroutines.delay(60_000); fusion.tick()?.let { p -> audit.record("presence", "departed", "event"); engine.onEvent(p) } } }
         motion.start()
         DeskbotAccessibilityService.onKillCombo = { kill.trigger("volume-down x3") }
         DeviceEventSource(app, scope) { e ->

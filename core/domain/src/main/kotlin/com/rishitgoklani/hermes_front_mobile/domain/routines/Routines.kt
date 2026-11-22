@@ -20,6 +20,8 @@ sealed interface DeviceEvent {
     data class Place(val name: String, val entered: Boolean) : DeviceEvent { override val type = "place" }
     data class Clipboard(val text: String) : DeviceEvent { override val type = "clipboard" }
     data class VisualChange(val score: Int) : DeviceEvent { override val type = "visual_change" }
+    data class FaceSeen(val unused: Boolean = true) : DeviceEvent { override val type = "face_seen" }
+    data class Presence(val arrived: Boolean) : DeviceEvent { override val type = "presence" }
     data class Sound(val label: String, val dbfs: Int) : DeviceEvent { override val type = "sound" }
 }
 
@@ -47,6 +49,7 @@ object TriggerMatcher {
             is DeviceEvent.Motion -> t.kind == null || e.kind.equals(t.kind, true)
             is DeviceEvent.Place -> has(e.name, t.place)
             is DeviceEvent.Clipboard -> has(e.text, t.contains)
+            is DeviceEvent.Presence -> t.kind == null || e.arrived == t.kind.equals("arrived", true)
             is DeviceEvent.Sound -> t.kind == null || e.label.equals(t.kind, true)
             is DeviceEvent.BatteryLow -> t.below == null || e.level <= t.below
             else -> true
@@ -57,8 +60,12 @@ object TriggerMatcher {
 /** Runs matching routines' tool calls through the same capability path as Hermes; cooldown prevents loops. */
 class RoutineEngine(private val repo: RoutineRepository, private val run: RunCapability, private val clock: () -> Long = System::currentTimeMillis, private val audit: com.rishitgoklani.hermes_front_mobile.domain.bridge.shell.AuditLog? = null) {
     private val lastRun = HashMap<String, Long>()
+    private val observers = mutableListOf<suspend (DeviceEvent) -> Unit>()
+    /** Observers see every event before routines run (e.g. presence fusion). */
+    fun observe(o: suspend (DeviceEvent) -> Unit) { observers += o }
 
     suspend fun onEvent(event: DeviceEvent): List<String> {
+        observers.forEach { it(event) }
         val ran = mutableListOf<String>()
         for (r in repo.all()) {
             if (!r.enabled || !TriggerMatcher.matches(r.trigger, event)) continue
