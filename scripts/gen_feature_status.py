@@ -21,8 +21,8 @@ for l in cat:
 assert len(feat) == 384, len(feat)
 
 BUILT = {
- 423: "avatar_action + AvatarView (three-vrm in a sandboxed WebView); CoolBanana.vrm (CC0) renders, idles, dances on device (canvas snapshot)",
- 424: "TTS word progress -> MouthShaper -> mouth on face (device-verified, screenshot)",
+ 423: "avatar_action + avatar_import (VRM license check: CC0/CC-BY/CC-BY-SA/everyone only) + AvatarView (three-vrm, sandboxed WebView, 30/10 fps limit); CoolBanana.vrm (CC0) imports, renders, dances on device (canvas snapshot)",
+ 424: "TTS word progress -> MouthShaper -> mouth on face ",
  41: "ui_tree, screenshot", 42: "ui_tree", 44: "ui_click, ui_tree", 45: "screen_state", 46: "ui_wait_for", 48: "screen_state",
  51: "overlay_text", 53: "overlay_highlight", 54: "Face tab full-screen, ui_show full", 56: "notification_post, overlay_text", 57: "overlay_text, screen_dim", 58: "screen_dim",
  61: "ui_click", 62: "ui_swipe", 65: "ui_global", 70: "vibrate",

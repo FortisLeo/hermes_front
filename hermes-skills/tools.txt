@@ -100,3 +100,4 @@ sound_watch
 time_now
 lock_display
 avatar_action
+avatar_import

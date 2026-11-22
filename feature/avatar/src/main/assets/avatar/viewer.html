@@ -40,8 +40,13 @@ new GLTFLoader().register(p => new VRMLoaderPlugin(p)).load('https://appassets.a
 const bone = n => vrm?.humanoid?.getNormalizedBoneNode(n);
 function set(n, x, y, z) { const b = bone(n); if (b) b.rotation.set(x, y, z); }
 
-function frame() {
+// Frame limit (heat/battery): 30 fps while something moves, 10 fps when idle and nothing is being said.
+let lastDraw = 0;
+function frame(now) {
   requestAnimationFrame(frame);
+  const busy = st.action !== 'idle' || st.mouth > 0.02 || st.bounce > 0.5;
+  if (now - lastDraw < (busy ? 1000 / 30 : 1000 / 10) - 2) return;
+  lastDraw = now;
   const dt = Math.min(clock.getDelta(), 0.1), t = clock.getElapsedTime();
   if (!vrm) { renderer.render(scene, camera); return; }
   const k = 1 - Math.pow(0.001, dt);
@@ -74,5 +79,5 @@ function frame() {
   }
   vrm.update(dt); renderer.render(scene, camera);
 }
-frame();
+requestAnimationFrame(frame);
 </script></body></html>
