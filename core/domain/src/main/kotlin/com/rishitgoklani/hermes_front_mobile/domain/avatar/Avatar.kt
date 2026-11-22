@@ -1,42 +1,28 @@
 package com.rishitgoklani.hermes_front_mobile.domain.avatar
 
-import com.rishitgoklani.hermes_front_mobile.domain.bridge.ActionResult
-import com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability
 import com.rishitgoklani.hermes_front_mobile.domain.face.Mood
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 
-/** Body animations the 3D avatar can play. Procedural, so any humanoid VRM works without clips. */
-enum class AvatarAction { Idle, Wave, Dance, Cheer, Bow, Nod }
+/** Rotation in radians (euler XYZ) in the VRM's normalized humanoid space, where zero is the T-pose. */
+data class Vec3(val x: Float, val y: Float, val z: Float)
 
-data class AvatarState(val enabled: Boolean = false, val mood: Mood = Mood.Neutral, val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f, val action: AvatarAction = AvatarAction.Idle, val clip: String = "")
-
-/** Body language per mood: head tilt/nod (radians), arm raise (0 down .. 1 up), slouch (0..1), bounce speed. */
-data class MoodPose(val headTilt: Float, val headNod: Float, val armRaise: Float, val slouch: Float, val bounce: Float)
-
-object AvatarMapper {
-    fun pose(mood: Mood): MoodPose = when (mood) {
-        Mood.Happy, Mood.Proud, Mood.Love -> MoodPose(0.08f, -0.05f, 0.25f, 0f, 1.0f)
-        Mood.Sad, Mood.Bored, Mood.Sleepy -> MoodPose(0.05f, 0.25f, 0f, 0.7f, 0f)
-        Mood.Angry, Mood.Disgusted -> MoodPose(0f, 0.12f, 0.15f, 0f, 0.3f)
-        Mood.Surprised, Mood.Scared -> MoodPose(0f, -0.12f, 0.5f, 0f, 0.6f)
-        Mood.Confused, Mood.Worried -> MoodPose(0.2f, 0.05f, 0.05f, 0.2f, 0f)
-        Mood.Shy -> MoodPose(0.15f, 0.2f, 0f, 0.3f, 0f)
-        else -> MoodPose(0f, 0f, 0f, 0f, 0.2f)
-    }
-
-    /** One JSON message for the viewer page; mouth is clamped 0..1 and gaze -1..1. */
-    fun toJson(s: AvatarState): String {
-        val p = pose(s.mood)
-        fun f(v: Float) = "%.3f".format(java.util.Locale.ROOT, v)
-        return """{"enabled":${s.enabled},"mood":"${s.mood.name.lowercase()}","mouth":${f(s.mouth.coerceIn(0f, 1f))},"gx":${f(s.gazeX.coerceIn(-1f, 1f))},"gy":${f(s.gazeY.coerceIn(-1f, 1f))},"action":"${s.action.name.lowercase()}","clip":"${s.clip.filter { it.isLetterOrDigit() || it in "-_" }}","tilt":${f(p.headTilt)},"nod":${f(p.headNod)},"arms":${f(p.armRaise)},"slouch":${f(p.slouch)},"bounce":${f(p.bounce)}}"""
-    }
+/** What the agent wants the body to look like: any humanoid bone rotations, any expression weights, and an optional hips offset (metres). */
+data class AvatarPose(val bones: Map<String, Vec3> = emptyMap(), val expressions: Map<String, Float> = emptyMap(), val hips: Vec3? = null) {
+    val isEmpty get() = bones.isEmpty() && expressions.isEmpty() && hips == null
 }
 
-/** Holds what the avatar should be doing; the viewer observes it. Face/mouth sources feed it from the app wiring. */
+/** A moment in an agent-authored animation. Bones missing from a keyframe keep interpolating between the keyframes that do set them. */
+data class AvatarKeyframe(val tMs: Int, val pose: AvatarPose)
+data class AvatarAnimation(val keyframes: List<AvatarKeyframe>, val loop: Boolean)
+
+data class AvatarState(
+    val enabled: Boolean = false, val mood: Mood = Mood.Neutral, val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f,
+    val pose: AvatarPose = AvatarPose(), val blendMs: Int = 250, val animation: AvatarAnimation? = null, val clip: String = "",
+)
+
+/** Holds what the avatar should be doing; the viewer observes it. Face/mouth sources and the agent's tools feed it. */
 class AvatarController {
     private val _state = MutableStateFlow(AvatarState())
     val state: StateFlow<AvatarState> = _state
@@ -44,18 +30,9 @@ class AvatarController {
     fun setMood(m: Mood) = _state.update { it.copy(mood = m) }
     fun setMouth(v: Float) = _state.update { it.copy(mouth = v) }
     fun look(x: Float?, y: Float?) = _state.update { it.copy(gazeX = x ?: 0f, gazeY = y ?: 0f) }
-    fun act(a: AvatarAction) = _state.update { it.copy(action = a, clip = "") }
-    fun playClip(name: String) = _state.update { it.copy(clip = name) }
+    fun setPose(p: AvatarPose, blendMs: Int) = _state.update { it.copy(pose = p, blendMs = blendMs, animation = null, clip = "") }
+    fun animate(a: AvatarAnimation) = _state.update { it.copy(animation = a, clip = "") }
+    fun reset() = _state.update { it.copy(pose = AvatarPose(), animation = null, clip = "") }
+    fun playClip(name: String) = _state.update { it.copy(clip = name, animation = null) }
     fun stopClip() = _state.update { it.copy(clip = "") }
-}
-
-fun avatarCapability(avatar: AvatarController) = Capability(
-    "avatar_action", "3D avatar: action = wave, dance, cheer, bow, nod or idle (stops the action); mode = avatar (show the 3D avatar as the face) or eyes (back to the eyes face).",
-    """{"type":"object","properties":{"action":{"type":"string","enum":["idle","wave","dance","cheer","bow","nod"]},"mode":{"type":"string","enum":["avatar","eyes"]}}}""",
-) { a ->
-    val mode = a["mode"]?.jsonPrimitive?.contentOrNull
-    if (mode != null) { if (mode != "avatar" && mode != "eyes") return@Capability ActionResult.failed("mode must be avatar or eyes"); avatar.setEnabled(mode == "avatar") }
-    val name = a["action"]?.jsonPrimitive?.contentOrNull ?: return@Capability if (mode != null) ActionResult.completed("Face mode: $mode") else ActionResult.failed("give action or mode")
-    val act = AvatarAction.entries.firstOrNull { it.name.equals(name, true) } ?: return@Capability ActionResult.failed("unknown action '$name'")
-    avatar.act(act); ActionResult.completed(if (act == AvatarAction.Idle) "Avatar idle" else "Avatar ${act.name.lowercase()}")
 }

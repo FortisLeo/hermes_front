@@ -99,10 +99,12 @@ visual_watch
 sound_watch
 time_now
 lock_display
-avatar_action
 avatar_import
 face_bubble
 overlay_draw
 pip_face
 avatar_clip
 avatar_import_clip
+avatar_mode
+avatar_pose
+avatar_animate

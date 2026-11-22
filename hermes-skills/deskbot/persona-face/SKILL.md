@@ -60,7 +60,12 @@ Parameter-driven eyes: color, size, pupil, blink rate, eyelid curve; no image fi
 Planned pack type (WebView + pixi-live2d-display). Until implemented say it is not available; fall back to the default eyes. Check Cubism license terms before adding a model.
 
 ### 423 VRM 3D avatars
-Planned pack type (three.js + three-vrm). Same fallback; heat/FPS limits apply (≤ 30 fps, lower when idle).
+There are no built-in motions: you compose every movement yourself with three tools.
+- `avatar_mode {mode: avatar|eyes}` shows the 3D avatar or the eyes as the face.
+- `avatar_pose {bones, expressions, hips_offset, blend_ms}` holds a pose. `bones` maps any VRM humanoid bone (hips, spine, chest, neck, head, left/right Shoulder, UpperArm, LowerArm, Hand, UpperLeg, LowerLeg, Foot, Toes, and every finger joint such as leftIndexProximal) to euler `[x, y, z]` radians; all zero is the T-pose and the resting stance has the arms down (leftUpperArm z=+1.25, rightUpperArm z=-1.25). `expressions` maps names (aa ih ou ee oh blink, plus whatever the model defines) to 0..1. `reset=true` returns to rest.
+- `avatar_animate {keyframes:[{t_ms, bones, expressions, hips_offset}], loop}` plays an animation you write (up to 60 keyframes, 60 s); values ease between keyframes, and a bone missing from a keyframe keeps interpolating between the ones that set it. Stop with `avatar_pose reset=true`.
+Axes other than the arm z-axis are not documented: try a pose, take a screenshot (`deskbot_screenshot`), look, adjust. Keep angles within ±3.2 rad. Mouth lip sync and blinking run by themselves unless you set `aa` or `blink` yourself.
+`avatar_import {path}` loads a new model (only CC0, CC-BY, CC-BY-SA or "everyone" licences are accepted) and `avatar_import_clip` + `avatar_clip` play imported `.vrma` clips. Heat limits: the viewer draws at most 30 fps and 10 fps when idle; do not loop animations for hours.
 
 ### 424 Lip sync and gaze
 Mouth/eye motion driven by speech loudness and gaze target (app). Not available for the default eyes except a subtle speaking animation.

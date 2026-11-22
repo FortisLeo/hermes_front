@@ -57,8 +57,8 @@ class SenseTests {
         assertEquals(0.5f to 0f, got)
     }
     @Test fun presenceReportsFaceCountOnly() = runBlocking {
-        val r = presenceCapability(FakeCamera(byteArrayOf(1))) { 2 }.executor.execute(args()); assertEquals("completed", r.status); assertTrue(r.data!!["present"]!!.jsonPrimitive.content.toBoolean()); assertEquals("2", r.data!!["faces"]!!.jsonPrimitive.content)
-        assertTrue(presenceCapability(FakeCamera(byteArrayOf(1))) { 0 }.executor.execute(args()).message.contains("Nobody"))
+        val r = presenceCapability(FakeCamera(byteArrayOf(1)), { 2 }).executor.execute(args()); assertEquals("completed", r.status); assertTrue(r.data!!["present"]!!.jsonPrimitive.content.toBoolean()); assertEquals("2", r.data!!["faces"]!!.jsonPrimitive.content)
+        assertTrue(presenceCapability(FakeCamera(byteArrayOf(1)), { 0 }).executor.execute(args()).message.contains("Nobody"))
     }
     @Test fun killSwitchStatusAndTriggerButNoReset() = runBlocking {
         val k = KillSwitch(); val c = killSwitchCapability(k)

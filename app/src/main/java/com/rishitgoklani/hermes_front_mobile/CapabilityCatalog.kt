@@ -117,7 +117,7 @@ object CapabilityCatalog {
             addAll(timerCapabilities(TimerBook(), timers) { name -> d.tts.enqueue("Your $name timer is done."); poster.post("Timer done", name) })
             addAll(notificationCapabilities(notifications, history, poster))
             addAll(faceCapabilities(d.face, d.personas, d.onPersona)); add(quickActionsCapability(d.quickActions, d.registry))
-            d.avatar?.let { add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarCapability(it))
+            d.avatar?.let { add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarModeCapability(it)); add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarPoseCapability(it)); add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarAnimateCapability(it))
                 val dir = File(d.app.filesDir, "avatar")
                 add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarImportCapability(
                     stage = { src -> dir.mkdirs(); val tmp = File(dir, "incoming.vrm"); val r = ProcessCommandRunner().run("cp '${src.replace("'", "")}' '${tmp.path}' && chmod 644 '${tmp.path}'", root = true); if (r.exitCode == 0 && tmp.isFile) tmp.readBytes().also { tmp.delete() } else null },

@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
-import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarMapper
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.PoseParser
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarState
 import java.io.File
 
@@ -41,7 +41,7 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
             settings.javaScriptEnabled = true; settings.allowFileAccess = false; settings.allowContentAccess = false; settings.blockNetworkLoads = false
             webViewClient = object : WebViewClient() {
                 // The page may finish loading after the first state was pushed, so send the latest state again.
-                override fun onPageFinished(view: WebView, url: String?) { view.evaluateJavascript("window.avatar&&window.avatar.apply(${AvatarMapper.toJson(latest.value)})", null) }
+                override fun onPageFinished(view: WebView, url: String?) { view.evaluateJavascript("window.avatar&&window.avatar.apply(${PoseParser.toJson(latest.value)})", null) }
                 override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest) = loader.shouldInterceptRequest(request.url)
             }
             webChromeClient = object : android.webkit.WebChromeClient() {
@@ -79,5 +79,5 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
         owner?.lifecycle?.addObserver(obs)
         onDispose { owner?.lifecycle?.removeObserver(obs) }
     }
-    LaunchedEffect(state, web) { web?.evaluateJavascript("window.avatar&&window.avatar.apply(${AvatarMapper.toJson(state)})", null) }
+    LaunchedEffect(state, web) { web?.evaluateJavascript("window.avatar&&window.avatar.apply(${PoseParser.toJson(state)})", null) }
 }

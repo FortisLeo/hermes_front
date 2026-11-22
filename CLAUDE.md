@@ -7,7 +7,7 @@ Kotlin 2.2, AGP 9.3, Compose (BOM in `gradle/libs.versions.toml`), coroutines/Fl
 
 ## Commands
 - Build: `./gradlew assembleDebug`
-- Unit tests: `./gradlew testDebugUnitTest` (must pass before any install)
+- Unit tests: `./gradlew test testDebugUnitTest` (JVM domain tests + Android unit tests; must pass before any install)
 - Install + grant: `adb install -r -g app/build/outputs/apk/debug/app-debug.apk`, then `adb push scripts/grant_all.sh /data/local/tmp/ && adb shell su -c 'sh /data/local/tmp/grant_all.sh'` (re-run after every update)
 - Logs: `adb logcat | grep -i deskbot`
 
