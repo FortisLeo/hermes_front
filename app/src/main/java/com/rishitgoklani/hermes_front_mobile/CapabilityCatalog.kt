@@ -82,6 +82,7 @@ class CatalogDeps(
     val macros: com.rishitgoklani.hermes_front_mobile.domain.macro.MacroRecorder, val runCapability: () -> com.rishitgoklani.hermes_front_mobile.domain.behavior.RunCapability,
     val registry: () -> CapabilityRegistry,
     val onFaceSeen: () -> Unit = {},
+    val avatar: com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController? = null,
 )
 
 /** Builds the full tool set Hermes can call. One place to add a capability (open/closed: append a line). */
@@ -109,7 +110,7 @@ object CapabilityCatalog {
             addAll(timerCapabilities(TimerBook(), timers) { name -> d.tts.enqueue("Your $name timer is done."); poster.post("Timer done", name) })
             addAll(notificationCapabilities(notifications, history, poster))
             addAll(faceCapabilities(d.face, d.personas, d.onPersona)); add(quickActionsCapability(d.quickActions, d.registry))
-            add(wakeCapability(d.wake, d.modelReady)); add(presenceCapability(d.camera, d.faceCounter, com.rishitgoklani.hermes_front_mobile.data.capabilities.AndroidFaceLocator()) { x, y -> d.face.look(x, y); d.onFaceSeen() }); add(killSwitchCapability(d.kill))
+            d.avatar?.let { add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarCapability(it)) }; add(wakeCapability(d.wake, d.modelReady)); add(presenceCapability(d.camera, d.faceCounter, com.rishitgoklani.hermes_front_mobile.data.capabilities.AndroidFaceLocator()) { x, y -> d.face.look(x, y); d.onFaceSeen() }); add(killSwitchCapability(d.kill))
             add(ambientCapability(d.ambient)); add(auditLogCapability(d.auditFile)); addAll(routineCapabilities(d.routines, d.registry))
             addAll(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.placeCapabilities(d.places) { locationOnce(app) })
             add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.safeModeCapability(d.isSafeMode)); add(com.rishitgoklani.hermes_front_mobile.data.capabilities.soundLevelCapability())

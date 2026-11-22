@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "hermes_front_mobile"
 include(":app")
-include(":feature:a2ui", ":feature:face", ":feature:voice", ":feature:settings", ":core:domain", ":core:network", ":core:data", ":core:testing", ":feature:chat")
+include(":feature:avatar", ":feature:a2ui", ":feature:face", ":feature:voice", ":feature:settings", ":core:domain", ":core:network", ":core:data", ":core:testing", ":feature:chat")

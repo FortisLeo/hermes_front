@@ -21,6 +21,7 @@ for l in cat:
 assert len(feat) == 384, len(feat)
 
 BUILT = {
+ 423: "avatar_action + AvatarView (three-vrm in a sandboxed WebView); CoolBanana.vrm (CC0) renders, idles, dances on device (canvas snapshot)",
  424: "TTS word progress -> MouthShaper -> mouth on face (device-verified, screenshot)",
  41: "ui_tree, screenshot", 42: "ui_tree", 44: "ui_click, ui_tree", 45: "screen_state", 46: "ui_wait_for", 48: "screen_state",
  51: "overlay_text", 53: "overlay_highlight", 54: "Face tab full-screen, ui_show full", 56: "notification_post, overlay_text", 57: "overlay_text, screen_dim", 58: "screen_dim",
@@ -66,7 +67,7 @@ PARTIAL = {
 }
 BLOCKED = {63: "multi-touch gestures disabled: a two-stroke gesture coincided with a HyperOS input-service crash (see memory)", 7: "no NFC hardware on this phone", 344: "no IR blaster on this phone", 275: "bootguard module not installed", 279: "needs a systemless module (not installed)", 
            399: "needs a boot-animation module", 398: "needs a font module", 118: "gesture classification unreliable; experimental recipe only",
-           347: "needs external hardware", 348: "needs external hardware", 422: "Live2D engine/assets not built", 423: "VRM engine/assets not built", 60: "annotation canvas not built",
+           347: "needs external hardware", 348: "needs external hardware", 422: "Live2D engine/assets not built", 60: "annotation canvas not built",
            320: "teach-by-demonstration is experimental (recipe only)", 304: "screen-recall is a recipe; privacy-gated"}
 import json
 hver = {}

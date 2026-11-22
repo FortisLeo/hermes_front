@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":feature:voice"))
     implementation(project(":feature:face"))
     implementation(project(":feature:a2ui"))
+    implementation(project(":feature:avatar"))
     implementation(libs.androidx.navigation.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

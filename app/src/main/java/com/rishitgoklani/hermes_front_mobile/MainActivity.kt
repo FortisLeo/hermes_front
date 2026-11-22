@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 /** Everything lives on the face. Chat, voice, debug and settings sit in a hidden drawer (swipe in from the left edge). */
-private enum class Section(val label: String) { Chat("Chat"), Voice("Voice"), Debug("Debug"), Settings("Settings") }
+private enum class Section(val label: String) { Chat("Chat"), Voice("Voice"), Debug("Debug"), Settings("Settings"), Avatar("Avatar") }
 
 class MainActivity : ComponentActivity() {
     private val container by lazy { (application as DeskbotApp).container }
@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
     private fun Root(background: Color) {
         val scope = rememberCoroutineScope()
         val drawer = rememberDrawerState(DrawerValue.Closed)
-        var section by remember { mutableStateOf<Section?>(null) }
+        var section by remember { mutableStateOf<Section?>(Section.entries.firstOrNull { it.name.equals(intent?.getStringExtra("section"), true) }) }
         val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
         val face by container.face.state.collectAsStateWithLifecycle()
         val chatState by chat.state.collectAsStateWithLifecycle(); val voiceState by voice.state.collectAsStateWithLifecycle()
@@ -164,6 +164,7 @@ class MainActivity : ComponentActivity() {
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
                                         DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode) }
+                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir) }
                                     Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save) }
                                 }
                             }

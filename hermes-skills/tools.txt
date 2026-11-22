@@ -99,3 +99,4 @@ visual_watch
 sound_watch
 time_now
 lock_display
+avatar_action
