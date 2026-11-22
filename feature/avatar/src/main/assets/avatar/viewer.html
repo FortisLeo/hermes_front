@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>html,body{margin:0;height:100%;background:#05070A;overflow:hidden}canvas{display:block;width:100%;height:100%}</style>
+<style>html,body{margin:0;height:100%;background:#05070A;overflow:hidden}</style>
 <script type="importmap">{"imports":{"three":"./lib/three.module.min.js"}}</script>
 </head><body>
 <script type="module">
@@ -10,19 +10,20 @@ import { VRMLoaderPlugin, VRMUtils } from './lib/three-vrm.module.min.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
 renderer.setPixelRatio(1);  // this phone has 3.5 GB RAM; full-res WebGL gets the app killed under memory pressure
-document.body.appendChild(renderer.domElement);
+// The WebGL canvas is not composited reliably on this phone's WebView, so it stays off-screen and every frame is copied into a plain 2D canvas.
+const view = document.createElement('canvas'); document.body.appendChild(view); const vctx = view.getContext('2d', { willReadFrequently: true });
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05070a);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
 scene.add(new THREE.AmbientLight(0xffffff, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(1, 2, 2); scene.add(sun);
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); view.width = w; view.height = h; view.style.cssText = `position:fixed;left:0;top:0;width:${w}px;height:${h}px`; camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize(); window.onerror = (m, s2, l) => console.log('JSERR', m, l);
 
 let vrm = null, st = { mood: 'neutral', mouth: 0, gx: 0, gy: 0, action: 'idle', tilt: 0, nod: 0, arms: 0, slouch: 0, bounce: 0 };
 const cur = { mouth: 0, tilt: 0, nod: 0, arms: 0, slouch: 0, gx: 0, gy: 0 };
 let restHipsY = null, actStart = 0, lastAction = 'idle', blinkAt = 2, blinkT = -1;
 window.avatar = { apply(json) { try { const n = typeof json === 'string' ? JSON.parse(json) : json; if (n.action !== st.action) actStart = clock.getElapsedTime(); st = n; } catch (e) {} }, ready: false };
-window.avatar.snap = () => { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/png'); };
+window.avatar.snap = () => { renderer.render(scene, camera); vctx.drawImage(renderer.domElement, 0, 0); return view.toDataURL('image/png'); };
 const clock = new THREE.Clock();
 const lerp = (a, b, k) => a + (b - a) * k;
 
@@ -51,7 +52,7 @@ function frame(now) {
   if (now - lastDraw < (busy ? 1000 / 30 : 1000 / 10) - 2) return;
   lastDraw = now;
   const dt = Math.min(clock.getDelta(), 0.1), t = clock.getElapsedTime();
-  if (!vrm) { renderer.render(scene, camera); return; }
+  if (!vrm) { renderer.render(scene, camera); vctx.drawImage(renderer.domElement, 0, 0); return; }
   const k = 1 - Math.pow(0.001, dt);
   for (const key of ['mouth','tilt','nod','arms','slouch']) cur[key] = lerp(cur[key], st[key] ?? 0, k);
   cur.gx = lerp(cur.gx, st.gx, k); cur.gy = lerp(cur.gy, st.gy, k);
@@ -62,7 +63,7 @@ function frame(now) {
   // arms rest pose: hang down, slightly out; mood lifts them
   let lUA = 1.25 - cur.arms * 0.9, rUA = -1.25 + cur.arms * 0.9, lLA = 0, rLA = 0, lUAy = 0, rUAy = 0;
   if (a === 'wave') { rUA = 1.35; rLA = Math.sin(e * 9) * 0.5 + 0.5; headZ += 0.1; }
-  if (a === 'cheer') { lUA = -1.9 - Math.sin(e * 8) * 0.15; rUA = 1.9 + Math.sin(e * 8) * 0.15; hipsY = Math.abs(Math.sin(e * 8)) * 0.04; }
+  if (a === 'cheer') { lUA = -1.4 - Math.sin(e * 8) * 0.15; rUA = 1.4 + Math.sin(e * 8) * 0.15; hipsY = Math.abs(Math.sin(e * 8)) * 0.04; }
   if (a === 'dance') {
     const b = e * 6; hipsRz = Math.sin(b) * 0.12; hipsY = Math.abs(Math.sin(b)) * 0.03; spineX += Math.sin(b * 2) * 0.05;
     lUA = -1.0 - Math.sin(b) * 0.9; rUA = 1.0 - Math.sin(b + Math.PI) * 0.9; lLA = Math.sin(b) * 0.4; rLA = -Math.sin(b) * 0.4; headZ += Math.sin(b) * 0.12;
@@ -80,7 +81,7 @@ function frame(now) {
     blinkAt -= dt; if (blinkAt <= 0 && blinkT < 0) blinkT = 0;
     if (blinkT >= 0) { blinkT += dt; em.setValue('blink', Math.sin(Math.min(blinkT / 0.18, 1) * Math.PI)); if (blinkT > 0.18) { blinkT = -1; blinkAt = 2 + Math.random() * 3; em.setValue('blink', 0); } }
   }
-  vrm.update(dt); renderer.render(scene, camera);
+  vrm.update(dt); renderer.render(scene, camera); vctx.drawImage(renderer.domElement, 0, 0);
 }
 requestAnimationFrame(frame);
 </script></body></html>

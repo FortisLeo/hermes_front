@@ -31,6 +31,7 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
     val hasModel = File(avatarDir, "model.vrm").isFile
     if (!hasModel) { Box(modifier.fillMaxSize(), Alignment.Center) { Text("No avatar model. Put a .vrm at ${avatarDir.path}/model.vrm", color = Color.Gray) }; return }
     var web by remember { mutableStateOf<WebView?>(null) }
+    val latest = androidx.compose.runtime.rememberUpdatedState(state)
     AndroidView(modifier = modifier.fillMaxSize(), factory = { ctx ->
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(ctx))
@@ -39,12 +40,15 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
         WebView(ctx).apply {
             settings.javaScriptEnabled = true; settings.allowFileAccess = false; settings.allowContentAccess = false; settings.blockNetworkLoads = false
             webViewClient = object : WebViewClient() {
+                // The page may finish loading after the first state was pushed, so send the latest state again.
+                override fun onPageFinished(view: WebView, url: String?) { view.evaluateJavascript("window.avatar&&window.avatar.apply(${AvatarMapper.toJson(latest.value)})", null) }
                 override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest) = loader.shouldInterceptRequest(request.url)
             }
             webChromeClient = object : android.webkit.WebChromeClient() {
                 override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean { android.util.Log.d("DeskbotAvatar", "${m.messageLevel()} ${m.message()} (${m.sourceId()}:${m.lineNumber()})"); return true }
                 override fun onReceivedTitle(view: WebView, title: String) { android.util.Log.d("DeskbotAvatar", "title=$title") }
             }
+            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
             setBackgroundColor(0xFF05070A.toInt())
             loadUrl("https://appassets.androidplatform.net/assets/avatar/viewer.html"); web = this
         }

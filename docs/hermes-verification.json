@@ -54,7 +54,10 @@
   "expected": [
    "deskbot_quick_note"
   ],
-  "called": [],
+  "called": [
+   "deskbot_file_read",
+   "deskbot_notes_search"
+  ],
   "ok": false
  },
  "339": {
@@ -113,7 +116,10 @@
    "deskbot_camera_capture",
    "deskbot_quick_note"
   ],
-  "called": [],
+  "called": [
+   "deskbot_camera_capture",
+   "deskbot_shell"
+  ],
   "ok": false
  },
  "222": {
