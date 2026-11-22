@@ -43,10 +43,11 @@
   "called": [
    "deskbot_file_list",
    "deskbot_file_read",
-   "deskbot_file_search",
-   "deskbot_file_write"
+   "deskbot_file_write",
+   "deskbot_notes_search",
+   "deskbot_quick_note"
   ],
-  "ok": false
+  "ok": true
  },
  "310": {
   "prompt": "Add 'oat milk' to my shopping list by saving a quick note tagged 'shopping' with your desk",
@@ -54,9 +55,8 @@
    "deskbot_quick_note"
   ],
   "called": [
-   "deskbot_file_list",
    "deskbot_file_read",
-   "deskbot_file_write"
+   "deskbot_time_now"
   ],
   "ok": false
  },
@@ -87,12 +87,9 @@
    "deskbot_health_score"
   ],
   "called": [
-   "deskbot_battery",
-   "deskbot_network_info",
-   "deskbot_screenshot",
-   "deskbot_shell"
+   "deskbot_health_score"
   ],
-  "ok": false
+  "ok": true
  },
  "316": {
   "prompt": "Run a quick regression: call deskbot battery, deskbot screen_state, deskbot http_request t",
@@ -120,12 +117,7 @@
    "deskbot_quick_note"
   ],
   "called": [
-   "deskbot_app_list",
-   "deskbot_app_open",
    "deskbot_camera_capture",
-   "deskbot_file_list",
-   "deskbot_file_read",
-   "deskbot_screen_state",
    "deskbot_shell"
   ],
   "ok": false
@@ -184,14 +176,10 @@
    "deskbot_file_hash"
   ],
   "called": [
-   "deskbot_file_write",
-   "deskbot_http_request",
-   "deskbot_shell",
-   "deskbot_ui_click",
-   "deskbot_ui_show",
-   "deskbot_ui_tree"
+   "deskbot_download_file",
+   "deskbot_file_hash"
   ],
-  "ok": false
+  "ok": true
  },
  "176": {
   "prompt": "Send a Wake-on-LAN packet to MAC 00:11:22:33:44:55 using your deskbot tool.",
@@ -199,10 +187,9 @@
    "deskbot_wake_on_lan"
   ],
   "called": [
-   "deskbot_network_info",
-   "deskbot_ui_tree"
+   "deskbot_wake_on_lan"
   ],
-  "ok": false
+  "ok": true
  },
  "172": {
   "prompt": "Scan my local network for devices using your deskbot lan scan tool and list what you find.",
@@ -210,9 +197,14 @@
    "deskbot_lan_scan"
   ],
   "called": [
+   "deskbot_kill_switch",
+   "deskbot_lan_scan",
    "deskbot_network_info",
+   "deskbot_quick_actions",
+   "deskbot_safe_mode",
+   "deskbot_self_test",
    "deskbot_shell"
   ],
-  "ok": false
+  "ok": true
  }
 }
