@@ -104,3 +104,5 @@ avatar_import
 face_bubble
 overlay_draw
 pip_face
+avatar_clip
+avatar_import_clip

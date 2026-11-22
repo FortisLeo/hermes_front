@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './lib/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from './lib/three-vrm.module.min.js';
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from './lib/three-vrm-animation.module.min.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
 renderer.setPixelRatio(1);  // this phone has 3.5 GB RAM; full-res WebGL gets the app killed under memory pressure
@@ -22,7 +23,21 @@ addEventListener('resize', resize); resize(); window.onerror = (m, s2, l) => con
 let vrm = null, st = { mood: 'neutral', mouth: 0, gx: 0, gy: 0, action: 'idle', tilt: 0, nod: 0, arms: 0, slouch: 0, bounce: 0 };
 const cur = { mouth: 0, tilt: 0, nod: 0, arms: 0, slouch: 0, gx: 0, gy: 0 };
 let restHipsY = null, actStart = 0, lastAction = 'idle', blinkAt = 2, blinkT = -1;
-window.avatar = { apply(json) { try { const n = typeof json === 'string' ? JSON.parse(json) : json; if (n.action !== st.action) actStart = clock.getElapsedTime(); st = n; } catch (e) {} }, ready: false };
+let mixer = null, clipName = '', clipActive = false;
+async function setClip(name) {
+  clipName = name;
+  if (mixer) { mixer.stopAllAction(); }
+  clipActive = false;
+  if (!name || !vrm) return;
+  try {
+    const loader = new GLTFLoader(); loader.register(p => new VRMAnimationLoaderPlugin(p));
+    const g = await loader.loadAsync('https://appassets.androidplatform.net/model/clips/' + name + '.vrma');
+    if (clipName !== name) return;
+    const anim = g.userData.vrmAnimations && g.userData.vrmAnimations[0]; if (!anim) { console.log('CLIPERR no animation in', name); return; }
+    mixer = new THREE.AnimationMixer(vrm.scene); mixer.clipAction(createVRMAnimationClip(anim, vrm)).play(); clipActive = true; console.log('CLIP playing', name);
+  } catch (e) { console.log('CLIPERR', name, e); }
+}
+window.avatar = { apply(json) { try { const n = typeof json === 'string' ? JSON.parse(json) : json; if (n.action !== st.action) actStart = clock.getElapsedTime(); if ((n.clip || '') !== clipName) setClip(n.clip || ''); st = n; } catch (e) {} }, ready: false };
 window.avatar.snap = () => { renderer.render(scene, camera); vctx.drawImage(renderer.domElement, 0, 0); return view.toDataURL('image/png'); };
 const clock = new THREE.Clock();
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -56,7 +71,7 @@ function frame(now) {
   const k = 1 - Math.pow(0.001, dt);
   for (const key of ['mouth','tilt','nod','arms','slouch']) cur[key] = lerp(cur[key], st[key] ?? 0, k);
   cur.gx = lerp(cur.gx, st.gx, k); cur.gy = lerp(cur.gy, st.gy, k);
-  const a = st.action, e = t - actStart;
+  const a = clipActive ? 'idle' : st.action, e = t - actStart;
   const breathe = Math.sin(t * 1.6) * 0.012;
   let hipsY = 0, hipsRz = 0, spineX = 0.12 * cur.slouch, headX = cur.nod, headZ = cur.tilt, headY = -cur.gx * 0.5;
   headX += cur.gy * 0.25;
@@ -72,9 +87,12 @@ function frame(now) {
   if (a === 'bow') { const p = Math.sin(Math.min(e / 1.2, 1) * Math.PI); spineX += p * 0.7; headX += p * 0.2; }
   if (a === 'nod') headX += Math.sin(e * 7) * 0.2 * Math.max(0, 1 - e / 2);
   if (st.bounce > 0 && a === 'idle') hipsY += Math.abs(Math.sin(t * 5)) * 0.008 * st.bounce;
+  if (!clipActive) {
   set('leftUpperArm', 0, lUAy, lUA); set('rightUpperArm', 0, rUAy, rUA); set('leftLowerArm', 0, 0, lLA); set('rightLowerArm', 0, 0, rLA);
   set('spine', spineX + breathe, 0, 0); set('chest', breathe, 0, 0); set('neck', headX * 0.4, headY * 0.4, headZ * 0.4); set('head', headX * 0.6, headY * 0.6, headZ * 0.6);
-  const hips = bone('hips'); if (hips) { if (restHipsY === null) restHipsY = hips.position.y; hips.rotation.z = hipsRz; hips.position.y = restHipsY + hipsY; }
+  }
+  if (mixer && clipActive) mixer.update(dt);
+  const hips = !clipActive && bone('hips'); if (hips) { if (restHipsY === null) restHipsY = hips.position.y; hips.rotation.z = hipsRz; hips.position.y = restHipsY + hipsY; }
   const em = vrm.expressionManager;
   if (em) {
     em.setValue('aa', Math.min(1, cur.mouth)); 

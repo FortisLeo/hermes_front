@@ -24,7 +24,7 @@ BUILT = {
  55: "pip_face: the Deskbot face in a floating picture-in-picture window",
  60: "overlay_draw: circles, boxes, arrows, labels over any app (parser unit-tested)",
  52: "face_bubble: draggable overlay face above other apps, mood-driven, tap opens the app",
- 423: "avatar_action + avatar_import (VRM license check: CC0/CC-BY/CC-BY-SA/everyone only) + AvatarView (three-vrm, sandboxed WebView, 30/10 fps limit); CoolBanana.vrm (CC0) imports, renders, dances on device (canvas snapshot)",
+ 423: "avatar_action + avatar_import (VRM license check: CC0/CC-BY/CC-BY-SA/everyone only) + AvatarView (three-vrm, sandboxed WebView, 30/10 fps limit; avatar_import_clip + avatar_clip play .vrma dance clips, device-verified with a generated test clip); CoolBanana.vrm (CC0) imports, renders, dances on device (canvas snapshot)",
  424: "TTS word progress -> MouthShaper -> mouth on face ",
  41: "ui_tree, screenshot", 42: "ui_tree", 44: "ui_click, ui_tree", 45: "screen_state", 46: "ui_wait_for", 48: "screen_state",
  51: "overlay_text", 53: "overlay_highlight", 54: "Face tab full-screen, ui_show full", 56: "notification_post, overlay_text", 57: "overlay_text, screen_dim", 58: "screen_dim",
