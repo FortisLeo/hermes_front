@@ -73,6 +73,7 @@ This builds and tests, installs the app, applies permissions, installs the Herme
 | Doc | What |
 | --- | --- |
 | [docs/SETUP.md](docs/SETUP.md) | Setup guide: prerequisites, install, Hermes link, Termux extras, safety, troubleshooting |
+| [docs/guides/](docs/guides/README.md) | How-tos: open the Hermes dashboard from your PC (USB tunnel or SSH tunnel), with each step explained |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every feature and bridge tool by skill group, with status (generated) |
 | [docs/Feature status.md](docs/Feature%20status.md) | Per-feature status table (generated) |
 | [docs/Feature catalog.md](docs/Feature%20catalog.md) | The 384-feature catalog |

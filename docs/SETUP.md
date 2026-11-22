@@ -64,6 +64,10 @@ For start-at-boot, install the Termux:Boot app, open it once, and place `scripts
 
 Copy a permissively licensed `.vrm` to the phone and have Hermes call `avatar_import {path}` (only CC0, CC-BY, CC-BY-SA or VRM "everyone" licences are accepted), then `avatar_mode avatar`. `.vrma` animation clips import with `avatar_import_clip` and play with `avatar_clip`. See the README for how the agent poses the avatar.
 
+## Hermes dashboard on your PC
+
+To manage Hermes from a browser on your PC without exposing it to the network, use a tunnel: [USB tunnel](guides/dashboard-usb-tunnel.md) or [SSH tunnel over Wi-Fi](guides/dashboard-ssh-tunnel.md). The [overview](guides/dashboard-access.md) explains how to choose.
+
 ## 8. Safety
 
 - **Kill switch:** the phrase "emergency stop", three volume-down presses, or the `kill_switch` tool refuse all further tool calls. Only the user can reset it, on the phone (Debug screen). Hermes cannot.
