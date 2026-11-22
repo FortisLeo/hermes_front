@@ -101,3 +101,14 @@ Then `ssh -N deskbot` does the same thing. To keep the tunnel in the background,
 | Browser shows nothing | The dashboard is not running or is still building. Check `hermes dashboard --status`. |
 | Tunnel drops after a while | The phone slept or Android killed Termux. Keep `termux-wake-lock` on and keep the phone charging. |
 | The phone's IP changed | Wi-Fi gave it a new address. Look it up again, or reserve an address for the phone in your router. |
+
+## After the phone restarts
+`sshd` and the dashboard do **not** start by themselves after a reboot, so the PC gets `Connection refused` on port 8022. In Termux run:
+
+```sh
+termux-wake-lock
+sshd
+tmux new-window -d -t hermes -n dashboard 'hermes dashboard --no-open'
+```
+
+then run the `ssh -N -L ...` command on the PC again. To start them automatically at boot, install the Termux:Boot app, open it once, and use `scripts/termux/boot.sh` as `~/.termux/boot/10-deskbot.sh` (the one-click setup script places it). It always starts `sshd`; it starts the dashboard only if you create the flag file with `touch ~/.deskbot-dashboard`, because the dashboard uses a lot of memory.
