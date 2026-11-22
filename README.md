@@ -1,61 +1,116 @@
-# Deskbot — Android front end for a Hermes Agent desk robot
+# Deskbot — Android body for a Hermes Agent desk robot
 
-A dedicated, rooted Android phone becomes a desk robot: **Hermes Agent** (running in Termux) is the brain, this app is the body
-(face, voice, camera, screen control), and a local **tool bridge** lets Hermes act on the phone.
+A dedicated, rooted Android phone becomes a desk robot. **Hermes Agent** (running in Termux on the same phone) is the brain. This app is the body: a full-screen animated face or 3D avatar, a voice loop, camera, screen control and ~110 phone tools that Hermes calls through a local bridge.
 
 ```
-Hermes (Termux)  --deskbot-phone plugin-->  Bridge  127.0.0.1:8643  -->  Android app (~100 tools)
-Android app      --OpenAI-compatible API-->  Hermes 127.0.0.1:8642 (streaming chat, images, local time context)
+Hermes (Termux) --deskbot-phone plugin--> Bridge 127.0.0.1:8643 --> Android app (~110 tools)
+Android app --OpenAI-compatible API (SSE)--> Hermes 127.0.0.1:8642 (chat, images, local time context)
 ```
 
-## What's in here
+| | |
+| --- | --- |
+| ![Eyes face](docs/screenshots/eyes-neutral.png) | ![3D avatar with clock](docs/screenshots/avatar-idle.png) |
+| The face is the whole app: full screen, time, date and battery on it. | A VRM avatar can be the face instead. |
+
+## Contents
+- [Screenshots](#screenshots) · [What it does](#what-it-does) · [Quick start](#quick-start) · [Docs](#docs)
+- [Architecture](#architecture) · [Testing](#testing-and-verification) · [Safety](#safety) · [Status](#status)
+
+## Screenshots
+Everything below was captured from the real phone.
+
+| Avatar blushes when tapped | Tears (cry reaction) | Hearts (love mood) |
+| --- | --- | --- |
+| ![](docs/screenshots/avatar-tap-blush.png) | ![](docs/screenshots/avatar-tears.png) | ![](docs/screenshots/avatar-hearts.png) |
+
+| Agent-written pose (no built-in motions) | Agent keyframe animation | VRM animation clip |
+| --- | --- | --- |
+| ![](docs/screenshots/avatar-agent-pose.png) | ![](docs/screenshots/avatar-agent-animation.png) | ![](docs/screenshots/avatar-vrma-clip.png) |
+
+| Floating face bubble over other apps | Picture-in-picture face | Annotation overlay |
+| --- | --- | --- |
+| ![](docs/screenshots/floating-bubble.png) | ![](docs/screenshots/picture-in-picture.png) | ![](docs/screenshots/overlay-draw.png) |
+
+## What it does
+The complete list, with the status of every one of the 384 catalogued features and every bridge tool, is in **[docs/FEATURES.md](docs/FEATURES.md)**. In short:
+
+**Face and presence**
+- Fullscreen eyes face: 15 moods, 18 reactions, effects (tears, blush, hearts, sparkles, zzz), personas, `<expr .../>` tags in Hermes replies, idle behaviours, night sleep, touch reactions, quick actions (long-press), clock/date/battery.
+- Lip sync: the mouth follows the words being spoken.
+- Floating face bubble, picture-in-picture face, on-screen annotation overlay (circles, boxes, arrows, labels), lock-screen display.
+- Presence: counts faces (no identity, frame discarded), eyes follow a detected face, arrival/departure fusion of camera, sound, motion and visual change, spoken greeting on arrival.
+
+**3D VRM avatar**
+- Import a model (licence-checked: CC0, CC-BY, CC-BY-SA, VRM "everyone"), show it as the face, and let the agent move **any bone or node** (`avatar_bones`, `avatar_pose`, `avatar_animate`); there are no preset motions. Imports and plays `.vrma` clips. Emotion effects, tap reactions, lip sync and gaze work on it too.
+
+**Voice**
+- Wake word ("Hey bot", offline Vosk), speech-to-text, Hermes streaming reply, sentence-chunked text-to-speech, barge-in ("stop"), vision on demand ("what is this?" attaches a camera frame), kill phrase.
+
+**Phone control for the agent (bridge tools)**
+- Screen and input: accessibility tree, tap, swipe, drag, type, back/home, screenshot, highlight, wait-for.
+- Apps and system: open/stop/list apps, settings read/write, radios, volume, brightness, torch, vibrate, alarms, timers, clipboard, share target, intents, root shell (deny-listed and audited).
+- Notifications: read, history, one-time codes, post. Calendar, contacts, location, places and geofences, sensors, ambient light.
+- Camera, microphone level, visual and sound watchers, motion detector.
+- Files, archives, hashes, notes, downloads, LAN scan, Wake-on-LAN, DNS, port check, MQTT, HTTP, local folder server.
+- Routines (event → tool calls), macros (record and replay), self-test, health score, safe mode, kill switch.
+
+**Generative UI (A2UI)**
+- Hermes composes native cards, forms, toggles, sliders, gauges and timers on the face screen; they expire after a time or after an action.
+
+**Hermes skills**
+- 384 skill sections in 30 skill folders (`hermes-skills/deskbot`), one per feature in `docs/Feature catalog.md`, each with the exact tools and a verify step.
+
+## Quick start
+With a rooted phone that has Termux and Hermes, connected over adb:
+
+```sh
+./scripts/setup_device.sh
+```
+
+This builds and tests, installs the app, applies permissions, installs the Hermes skills, sets up the Termux scripts and packages (`openssh rsync ffmpeg nmap tesseract`) and syncs the bridge token. Then restart the Hermes gateway so it sees the tools. The full walkthrough, safety notes and troubleshooting table are in **[docs/SETUP.md](docs/SETUP.md)**.
+
+## Docs
+| Doc | What |
+| --- | --- |
+| [docs/SETUP.md](docs/SETUP.md) | Setup guide: prerequisites, install, Hermes link, Termux extras, safety, troubleshooting |
+| [docs/FEATURES.md](docs/FEATURES.md) | Every feature and bridge tool by skill group, with status (generated) |
+| [docs/Feature status.md](docs/Feature%20status.md) | Per-feature status table (generated) |
+| [docs/Feature catalog.md](docs/Feature%20catalog.md) | The 384-feature catalog |
+| [docs/Architecture.md](docs/Architecture.md) | Architecture and where a new capability goes |
+| [docs/Tab 1.md](docs/Tab%201.md) | The original project plan |
+| [CLAUDE.md](CLAUDE.md) | Module rules, SOLID and patterns, testing policy, Hermes contracts |
+| [THIRD_PARTY.md](THIRD_PARTY.md) | Libraries and bundled code with licences |
+
+## Architecture
+Multi-module clean architecture; dependencies point inward.
+
 | Path | What |
 | --- | --- |
 | `app/` | Wiring only: DI container, tool catalog, immersive face UI, foreground service, boot receiver, share target |
-| `core/domain` | Pure Kotlin: use cases, ports, capabilities (tools), face/persona engine, A2UI model, routines, safety |
-| `core/network` | Hermes client (SSE), bridge server/protocol, HTTP/LAN/MQTT/download tools |
-| `core/data` | Android adapters: accessibility, notifications, camera, speech, wake word (Vosk), sensors, overlays |
-| `feature/*` | Compose screens: face, chat, voice, settings/debug, generative UI renderer |
-| `hermes-skills/` | **384 Hermes skill sections** (one per Feature-catalog item) in Hermes `SKILL.md` format, plus `tools.txt` |
-| `docs/` | Project plan, architecture, feature catalog, generated `Feature status.md`, verification results |
-| `scripts/` | Permission grants, Termux watchdog/boot drafts, recipe + Hermes verification harnesses, status generator |
+| `core/domain` | Pure Kotlin: use cases, ports, capabilities (tools), face/persona engine, avatar pose model, A2UI model, routines, safety |
+| `core/network` | Hermes client (SSE), bridge server and protocol, HTTP/LAN/MQTT/download tools |
+| `core/data` | Android adapters: accessibility, notifications, camera, speech, wake word, sensors, overlays |
+| `core/testing` | The one shared set of fakes |
+| `feature/face` `chat` `voice` `settings` `a2ui` `avatar` | Compose screens; the avatar module hosts three.js + three-vrm in a sandboxed WebView |
+| `hermes-skills/` | The Hermes skills and `tools.txt` |
+| `scripts/` | Setup, permission grants, Termux scripts, verification harnesses, doc generators |
 
-## Highlights
-- Fullscreen animated face (15 moods, 18 reactions, effects layer, personas, `<expr .../>` tags in replies); clock/date on the face.
-- Always-listening wake word and "stop" barge-in, camera attached to "what is this" questions, kill switch, crash-loop safe mode.
-- ~100 bridge tools: screen reading and control (accessibility), notifications, camera, files, network, timers, routines, generative UI (`ui_show`, auto-expiring cards over the face).
-- Clean architecture + multi-module, 360+ unit tests; every catalog feature has a skill, enforced by `FeatureCoverageTest`.
+Patterns in use: ports and adapters, strategy and decorator (deny-list and audit around the shell), registry (capabilities, A2UI components), command (macros), state machine (bot state), observer (StateFlow).
 
-## Build and test
+## Testing and verification
+```sh
+./gradlew test testDebugUnitTest assembleDebug     # JVM domain tests + Android unit tests + build
+python3 scripts/verify_recipes.py                   # runs read-only skill recipes on the phone (needs the app's bridge up)
+python3 scripts/verify_hermes.py                    # real Hermes agent tasks end to end (15 of 16 pass)
+python3 scripts/gen_feature_status.py && python3 scripts/gen_docs.py   # regenerate the status and feature docs
 ```
-./gradlew test testDebugUnitTest assembleDebug
-```
-Install on the phone (root install works even when USB install is restricted):
-```
-adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/deskbot.apk
-adb shell su -c 'pm install -r -g /data/local/tmp/deskbot.apk'
-adb push scripts/grant_all.sh /data/local/tmp/ && adb shell su -c 'sh /data/local/tmp/grant_all.sh'
-```
-Install the skills into Hermes: copy `hermes-skills/deskbot` to `~/.hermes/skills/deskbot` in Termux, then restart the Hermes gateway so it registers the `deskbot_*` tools.
+`FeatureCoverageTest` enforces that every catalog number has exactly one skill section and that every tool a skill names exists.
+
+## Safety
+Kill switch (phrase, volume-down ×3, tool; only the user resets it on the phone), shell deny-list, audited tool calls, crash-loop safe mode, no multi-stroke gestures on Xiaomi hardware, secrets never in the repo or logs. Details in [docs/SETUP.md](docs/SETUP.md#8-safety).
 
 ## Status
-See [`docs/Feature status.md`](docs/Feature%20status.md) (generated by `scripts/gen_feature_status.py`) for exactly which of the 384 catalog features are built, verified on a real device, partial, recipe-only, or blocked.
+384 catalogued features: **116 built**, **126 recipe verified**, **28 partial**, **101 recipe only**, **13 blocked** (hardware or modules this phone lacks). Most recipe-only features need other apps or accounts; most partial ones need a real person in front of the camera to confirm. See [docs/Feature status.md](docs/Feature%20status.md).
 
-## Safety notes
-Built for a **dedicated device with no personal data**. The shell tool has a destructive-command deny-list and an audit log; the kill switch blocks all tool calls until reset on the phone. Multi-touch accessibility gestures are disabled on Xiaomi-family devices (observed input-service crash).
-
-## One-click setup of a new phone
-
-With a rooted phone that already has Termux and Hermes installed, connected over adb:
-
-```sh
-./scripts/setup_device.sh                 # build + test, install, grants, Hermes skills, Termux scripts and packages, token sync
-./scripts/setup_device.sh --no-build      # reuse the last built APK
-./scripts/setup_device.sh --no-termux-packages
-```
-
-Each step prints `ok` or `FAIL` and the rest still run. The Termux package step (`openssh rsync ffmpeg nmap tesseract`) takes a backup of `~/.hermes` first and never runs `pkg upgrade`. Afterwards restart the Hermes gateway so it sees the `deskbot_*` tools, and optionally install the Termux:Boot app so the watchdog starts at boot. Never put the API key or bridge token in the repo; the scripts read the token on the phone.
-
-## 3D avatar (VRM)
-
-Put a permissively licensed `.vrm` on the phone and import it with the `avatar_import` tool (CC0, CC-BY, CC-BY-SA and VRM "everyone" are accepted; others are rejected). `avatar_mode avatar` makes it the face. The agent poses it with `avatar_bones` (list every bone/node), `avatar_pose` and `avatar_animate` (keyframes); there are no built-in motions. `.vrma` clips are imported with `avatar_import_clip` and played with `avatar_clip`. Emotion effects (blush, tears, hearts) are drawn over the head, and taps react like on the eyes face. The viewer is three.js + three-vrm in a sandboxed WebView, limited to 30 fps (10 when idle); on a phone with little RAM it falls back to the eyes face after two unclean exits in a row.
+## Licence
+Application code: see the repository. Third-party libraries and bundled files are listed with their licences in [THIRD_PARTY.md](THIRD_PARTY.md).
