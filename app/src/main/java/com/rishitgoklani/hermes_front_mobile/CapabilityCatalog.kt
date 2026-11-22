@@ -106,6 +106,7 @@ object CapabilityCatalog {
             addAll(sensorCapabilities(app)); add(locationCapability(app)); add(networkInfoCapability(app))
             addAll(mediaCapabilities(app)); add(hapticsCapability(app)); add(alarmCapability(app)); addAll(overlayCapabilities(app, overlay))
             add(highlightCapability(app, HighlightOverlay(app), ui))
+            add(com.rishitgoklani.hermes_front_mobile.data.capabilities.faceBubbleCapability(com.rishitgoklani.hermes_front_mobile.data.capabilities.FaceBubble(app, d.face, d.scope, android.content.Intent(app, MainActivity::class.java))))
             addAll(calendarCapabilities(app)); addAll(contactCapabilities(app)); addAll(fileCapabilities(sandbox)); add(httpRequestCapability())
             addAll(timerCapabilities(TimerBook(), timers) { name -> d.tts.enqueue("Your $name timer is done."); poster.post("Timer done", name) })
             addAll(notificationCapabilities(notifications, history, poster))

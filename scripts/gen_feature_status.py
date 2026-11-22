@@ -21,6 +21,7 @@ for l in cat:
 assert len(feat) == 384, len(feat)
 
 BUILT = {
+ 52: "face_bubble: draggable overlay face above other apps, mood-driven, tap opens the app",
  423: "avatar_action + avatar_import (VRM license check: CC0/CC-BY/CC-BY-SA/everyone only) + AvatarView (three-vrm, sandboxed WebView, 30/10 fps limit); CoolBanana.vrm (CC0) imports, renders, dances on device (canvas snapshot)",
  424: "TTS word progress -> MouthShaper -> mouth on face ",
  41: "ui_tree, screenshot", 42: "ui_tree", 44: "ui_click, ui_tree", 45: "screen_state", 46: "ui_wait_for", 48: "screen_state",
@@ -49,7 +50,7 @@ BUILT = {
  429: "15 moods, 18 reactions, fallbacks", 430: "effects layer", 431: "<expr/> tags in chat+voice",
 }
 PARTIAL = {
- 43: "screenshot + vision OCR works; Termux tesseract optional", 47: "screenshot + vision", 52: "face on Face tab; floating bubble not built", 55: "PiP only via apps", 59: "notification_post; custom AOD not built",
+ 43: "screenshot + vision OCR works; Termux tesseract optional", 47: "screenshot + vision", 55: "PiP only via apps", 59: "notification_post; custom AOD not built",
  66: "volume/media keys; others need root shell",
  82: "app_stop soft stop; force-stop needs root shell", 91: "app_info shows grants; pm grant needs root shell", 104: "notifications_list + model ranking", 
  114: "vision decode; zbar optional", 115: "vision counting", 116: "visual_watch: capture->thumbnail->diff pipeline verified on device (static scene diff 0.3, no false alarm); detector unit-tested; no live positive event produced", 119: "time-lapse recipe; video via stock camera UI",
