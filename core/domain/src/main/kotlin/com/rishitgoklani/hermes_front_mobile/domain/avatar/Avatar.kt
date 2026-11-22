@@ -8,9 +8,9 @@ import kotlinx.coroutines.flow.update
 /** Rotation in radians (euler XYZ) in the VRM's normalized humanoid space, where zero is the T-pose. */
 data class Vec3(val x: Float, val y: Float, val z: Float)
 
-/** What the agent wants the body to look like: any humanoid bone rotations, any expression weights, and an optional hips offset (metres). */
-data class AvatarPose(val bones: Map<String, Vec3> = emptyMap(), val expressions: Map<String, Float> = emptyMap(), val hips: Vec3? = null) {
-    val isEmpty get() = bones.isEmpty() && expressions.isEmpty() && hips == null
+/** What the agent wants the body to look like: rotations of any bone or node of the model (humanoid or not), translation offsets of any node, any expression weights, and an optional hips offset (metres). */
+data class AvatarPose(val bones: Map<String, Vec3> = emptyMap(), val expressions: Map<String, Float> = emptyMap(), val hips: Vec3? = null, val offsets: Map<String, Vec3> = emptyMap()) {
+    val isEmpty get() = bones.isEmpty() && expressions.isEmpty() && hips == null && offsets.isEmpty()
 }
 
 /** A moment in an agent-authored animation. Bones missing from a keyframe keep interpolating between the keyframes that do set them. */
@@ -26,6 +26,10 @@ data class AvatarState(
 class AvatarController {
     private val _state = MutableStateFlow(AvatarState())
     val state: StateFlow<AvatarState> = _state
+    private val _nodes = MutableStateFlow<List<String>>(emptyList())
+    /** Every bone/node name the loaded model has, reported by the viewer once the model is ready. */
+    val nodes: StateFlow<List<String>> = _nodes
+    fun setNodes(names: List<String>) { _nodes.value = names }
     fun setEnabled(v: Boolean) = _state.update { it.copy(enabled = v) }
     fun setMood(m: Mood) = _state.update { it.copy(mood = m) }
     fun setMouth(v: Float) = _state.update { it.copy(mouth = v) }

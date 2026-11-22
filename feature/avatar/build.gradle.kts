@@ -15,4 +15,5 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.webkit)
+    implementation(libs.kotlinx.serialization.json)
 }

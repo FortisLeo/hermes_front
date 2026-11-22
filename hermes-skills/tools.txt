@@ -108,3 +108,4 @@ avatar_import_clip
 avatar_mode
 avatar_pose
 avatar_animate
+avatar_bones

@@ -27,7 +27,7 @@ import java.io.File
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier) {
+fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier, onNodes: (List<String>) -> Unit = {}) {
     val hasModel = File(avatarDir, "model.vrm").isFile
     if (!hasModel) { Box(modifier.fillMaxSize(), Alignment.Center) { Text("No avatar model. Put a .vrm at ${avatarDir.path}/model.vrm", color = Color.Gray) }; return }
     var web by remember { mutableStateOf<WebView?>(null) }
@@ -46,7 +46,10 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
             }
             webChromeClient = object : android.webkit.WebChromeClient() {
                 override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean { android.util.Log.d("DeskbotAvatar", "${m.messageLevel()} ${m.message()} (${m.sourceId()}:${m.lineNumber()})"); return true }
-                override fun onReceivedTitle(view: WebView, title: String) { android.util.Log.d("DeskbotAvatar", "title=$title") }
+                override fun onReceivedTitle(view: WebView, title: String) {
+                    android.util.Log.d("DeskbotAvatar", "title=$title")
+                    if (title == "ready") view.evaluateJavascript("window.avatar.listBones()") { r -> runCatching { onNodes(kotlinx.serialization.json.Json.parseToJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(r).let { (it as kotlinx.serialization.json.JsonPrimitive).content }).let { (it as kotlinx.serialization.json.JsonArray).map { n -> (n as kotlinx.serialization.json.JsonPrimitive).content } }) } }
+                }
             }
             setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
             setBackgroundColor(0xFF05070A.toInt())

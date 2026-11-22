@@ -20,8 +20,19 @@ class AvatarPoseTest {
         val (p, e) = PoseParser.pose(obj("""{"bones":{"head":[0.1,0,0.2]},"expressions":{"aa":0.7,"blink":3},"hips_offset":[0,-0.1,0]}"""))
         assertNull(e); assertEquals(Vec3(0.1f, 0f, 0.2f), p!!.bones["head"]); assertEquals(1f, p.expressions["blink"]); assertEquals(Vec3(0f, -0.1f, 0f), p.hips)
     }
-    @Test fun rejectsUnknownBoneBadShapeAndHugeAngles() {
-        assertTrue(PoseParser.pose(obj("""{"bones":{"tail":[0,0,0]}}""")).second!!.contains("unknown bone"))
+    @Test fun acceptsAnyNodeNameAndOffsets() {
+        val (p, e) = PoseParser.pose(obj("""{"bones":{"Banana_Tail.01":[0,0.3,0]},"offsets":{"Hair_Root":[0,0.02,0]}}"""))
+        assertNull(e); assertEquals(Vec3(0f, 0.3f, 0f), p!!.bones["Banana_Tail.01"]); assertEquals(Vec3(0f, 0.02f, 0f), p.offsets["Hair_Root"])
+    }
+    @Test fun toolChecksNamesAgainstTheLoadedModelAndListsThem() {
+        val c = AvatarController(); assertEquals("failed", run(avatarBonesCapability(c), "{}").status)
+        c.setNodes(listOf("hips", "Tail")); assertTrue(run(avatarBonesCapability(c), "{}").message.contains("Tail"))
+        assertEquals("completed", run(avatarPoseCapability(c), """{"bones":{"Tail":[0,0.2,0]}}""").status)
+        assertTrue(run(avatarPoseCapability(c), """{"bones":{"Wing":[0,0.2,0]}}""").message.contains("avatar_bones"))
+        assertEquals("failed", run(avatarAnimateCapability(c), """{"keyframes":[{"t_ms":0,"offsets":{"Ghost":[0,0,0]}}]}""").status)
+    }
+    @Test fun rejectsBadNamesBadShapeAndHugeAngles() {
+        assertNotNull(PoseParser.pose(obj("""{"bones":{"a/b;rm":[0,0,0]}}""")).second)
         assertNotNull(PoseParser.pose(obj("""{"bones":{"head":[0,0]}}""")).second)
         assertNotNull(PoseParser.pose(obj("""{"bones":{"head":[9,0,0]}}""")).second)
         assertNotNull(PoseParser.pose(obj("""{"hips_offset":[0,5,0]}""")).second)
@@ -37,7 +48,7 @@ class AvatarPoseTest {
         assertEquals("completed", run(pose, """{"bones":{"rightUpperArm":[0,0,-2]},"blend_ms":100}""").status); assertEquals(100, c.state.value.blendMs); assertEquals(1, c.state.value.pose.bones.size)
         assertEquals("completed", run(anim, """{"keyframes":[{"t_ms":0,"bones":{"hips":[0,0,0]}}]}""").status); assertNotNull(c.state.value.animation)
         assertEquals("completed", run(pose, """{"reset":true}""").status); assertTrue(c.state.value.pose.isEmpty && c.state.value.animation == null)
-        assertEquals("failed", run(pose, "{}").status); assertEquals("failed", run(pose, """{"bones":{"wing":[0,0,0]}}""").status)
+        assertEquals("failed", run(pose, "{}").status); assertEquals("failed", run(pose, """{"bones":{"wi;ng":[0,0,0]}}""").status)
     }
     @Test fun modeToolSwitchesFace() { val c = AvatarController(); val m = avatarModeCapability(c); run(m, """{"mode":"avatar"}"""); assertTrue(c.state.value.enabled); run(m, """{"mode":"eyes"}"""); assertTrue(!c.state.value.enabled); assertEquals("failed", run(m, """{"mode":"x"}""").status) }
     @Test fun viewerJsonIsValidAndClamped() {

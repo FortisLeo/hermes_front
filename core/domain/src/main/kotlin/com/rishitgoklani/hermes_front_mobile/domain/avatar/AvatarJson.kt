@@ -11,7 +11,7 @@ import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/** The 55 VRM humanoid bones the agent may rotate. */
+/** The 55 standard VRM humanoid bones (documentation and discovery; the agent may also move any other node of the model by name). */
 object HumanoidBones {
     val names: Set<String> = buildSet {
         addAll(listOf("hips", "spine", "chest", "upperChest", "neck", "head", "leftEye", "rightEye", "jaw"))
@@ -27,11 +27,12 @@ object PoseParser {
     const val MAX_KEYFRAMES = 60
     const val MAX_DURATION_MS = 60_000
     private const val MAX_ANGLE = 3.2f
+    private val NODE_NAME = Regex("[A-Za-z0-9_.:\\- ]{1,64}")
 
     fun pose(o: JsonObject): Pair<AvatarPose?, String?> {
         val bones = mutableMapOf<String, Vec3>()
         (o["bones"] as? JsonObject)?.forEach { (name, v) ->
-            if (name !in HumanoidBones.names) return null to "unknown bone '$name' (use VRM humanoid names such as hips, spine, head, leftUpperArm, rightLowerLeg, leftIndexProximal)"
+            if (!name.matches(NODE_NAME)) return null to "bad bone/node name '$name' (call avatar_bones to list the model's bones)"
             val a = v as? JsonArray; val f = a?.map { it.jsonPrimitive.floatOrNull }
             if (f == null || f.size != 3 || f.any { it == null }) return null to "bone '$name' needs [x, y, z] radians"
             if (f.any { kotlin.math.abs(it!!) > MAX_ANGLE }) return null to "bone '$name': angles must be within ±$MAX_ANGLE radians"
@@ -42,12 +43,19 @@ object PoseParser {
             if (!name.matches(Regex("[A-Za-z0-9_]{1,32}"))) return null to "bad expression name '$name'"
             expr[name] = (v.jsonPrimitive.floatOrNull ?: return null to "expression '$name' needs a number 0..1").coerceIn(0f, 1f)
         }
+        val offsets = mutableMapOf<String, Vec3>()
+        (o["offsets"] as? JsonObject)?.forEach { (name, v) ->
+            if (!name.matches(NODE_NAME)) return null to "bad node name '$name'"
+            val f = (v as? JsonArray)?.map { it.jsonPrimitive.floatOrNull }
+            if (f == null || f.size != 3 || f.any { it == null || kotlin.math.abs(it) > 1.5f }) return null to "offset '$name' needs [x, y, z] metres within ±1.5"
+            offsets[name] = Vec3(f[0]!!, f[1]!!, f[2]!!)
+        }
         val hips = (o["hips_offset"] as? JsonArray)?.let { a ->
             val f = a.map { it.jsonPrimitive.floatOrNull }
             if (f.size != 3 || f.any { it == null || kotlin.math.abs(it) > 1.5f }) return null to "hips_offset needs [x, y, z] metres within ±1.5"
             Vec3(f[0]!!, f[1]!!, f[2]!!)
         }
-        return AvatarPose(bones, expr, hips) to null
+        return AvatarPose(bones, expr, hips, offsets) to null
     }
 
     fun animation(o: JsonObject): Pair<AvatarAnimation?, String?> {
@@ -69,6 +77,7 @@ object PoseParser {
         put("bones", buildJsonObject { p.bones.forEach { (k, v) -> put(k, vec(v)) } })
         put("expr", buildJsonObject { p.expressions.forEach { (k, v) -> put(k, v) } })
         put("hips", p.hips?.let { vec(it) } ?: JsonNull)
+        put("pos", buildJsonObject { p.offsets.forEach { (k, v) -> put(k, vec(v)) } })
     }
 
     /** One JSON message for the viewer page. Mouth is clamped 0..1, gaze -1..1. */

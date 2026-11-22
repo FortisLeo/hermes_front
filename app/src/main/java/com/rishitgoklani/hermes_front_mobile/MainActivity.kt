@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
                 val av by container.avatar.state.collectAsStateWithLifecycle()
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir) }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes) }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     overlay = {
                         if (liveScreen == null) { if (!inPip.value && !av.enabled) FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) }
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {
@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
                                         DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode) }
-                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir) }
+                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes) }
                                     Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save) }
                                 }
                             }

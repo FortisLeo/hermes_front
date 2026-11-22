@@ -20,9 +20,9 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(1, 2, 2)
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); view.width = w; view.height = h; view.style.cssText = `position:fixed;left:0;top:0;width:${w}px;height:${h}px`; camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize(); window.onerror = (m, s2, l) => console.log('JSERR', m, l);
 
-let vrm = null, st = { mouth: 0, gx: 0, gy: 0, clip: '', blend: 250, pose: { bones: {}, expr: {}, hips: null }, anim: null };
+let vrm = null, st = { mouth: 0, gx: 0, gy: 0, clip: '', blend: 250, pose: { bones: {}, expr: {}, hips: null, pos: {} }, anim: null };
 let animStart = 0, poseChangedAt = -1e9, blinkAt = 2, blinkT = -1, restHipsY = null;
-const curBones = {}, curExpr = {}; let curHips = [0, 0, 0], curMouth = 0, curGx = 0, curGy = 0;
+const curBones = {}, curExpr = {}, curPos = {}; let curHips = [0, 0, 0], curMouth = 0, curGx = 0, curGy = 0;
 // Only a neutral resting stance lives here (arms down). Every motion beyond that comes from the agent's pose/animation messages.
 const REST = { leftUpperArm: [0, 0, 1.25], rightUpperArm: [0, 0, -1.25] };
 let mixer = null, clipName = '', clipActive = false;
@@ -58,15 +58,35 @@ new GLTFLoader().register(p => new VRMLoaderPlugin(p)).load('https://appassets.a
   window.avatar.ready = true; document.title = 'ready';
 }, undefined, e => { document.title = 'error:' + e; });
 
-const bone = n => vrm?.humanoid?.getNormalizedBoneNode(n);
-function set(n, x, y, z) { const b = bone(n); if (b) b.rotation.set(x, y, z); }
+const raw = {};  // non-humanoid nodes: captured rest transform, agent values are offsets from it
+function bone(n) { return vrm?.humanoid?.getNormalizedBoneNode(n) || null; }
+function node(n) { return bone(n) || vrm?.scene?.getObjectByName(n) || null; }
+function set(n, x, y, z) {
+  const b = bone(n); if (b) { b.rotation.set(x, y, z); return; }
+  const o = vrm?.scene?.getObjectByName(n); if (!o) return;
+  const r = raw[n] || (raw[n] = { rot: o.rotation.clone(), pos: o.position.clone() });
+  o.rotation.set(r.rot.x + x, r.rot.y + y, r.rot.z + z);
+}
+function setPos(n, x, y, z) {
+  const o = node(n); if (!o) return;
+  const r = raw[n] || (raw[n] = { rot: o.rotation.clone(), pos: o.position.clone() });
+  o.position.set(r.pos.x + x, r.pos.y + y, r.pos.z + z);
+}
+// Names the agent may use: humanoid bones that exist plus every other named node.
+window.avatar.listBones = () => {
+  const names = new Set();
+  const h = vrm.humanoid.humanBones ? Object.keys(vrm.humanoid.humanBones) : [];
+  h.forEach(n => { if (vrm.humanoid.getNormalizedBoneNode(n)) names.add(n); });
+  vrm.scene.traverse(o => { if (o.name && !/^(Scene|Armature|Root)$/i.test(o.name) && !/^Normalized_/.test(o.name)) names.add(o.name); });
+  return JSON.stringify([...names]);
+};
 
 const ease = x => x * x * (3 - 2 * x);
 // Samples an agent animation at time t (ms): per bone/expression, ease between the keyframes that set it; before the first one it starts from rest.
 function sample(anim, t) {
   const kfs = anim.keyframes, dur = kfs[kfs.length - 1].t;
   if (anim.loop && dur > 0) t = t % dur; else t = Math.min(t, dur);
-  const bones = {}, expr = {}; let hips = null;
+  const bones = {}, expr = {}, pos = {}; let hips = null;
   const track = (get, restVal, out, key) => {
     let prev = { t: 0, v: restVal }, next = null;
     for (const k of kfs) { const v = get(k); if (v === undefined || v === null) continue; if (k.t <= t) prev = { t: k.t, v }; else { next = { t: k.t, v }; break; } }
@@ -74,12 +94,13 @@ function sample(anim, t) {
     const f = next.t === prev.t ? 1 : ease((t - prev.t) / (next.t - prev.t));
     return Array.isArray(next.v) ? next.v.map((x, i) => prev.v[i] + (x - prev.v[i]) * f) : prev.v + (next.v - prev.v) * f;
   };
-  const boneNames = new Set(), exprNames = new Set(); let anyHips = false;
-  for (const k of kfs) { Object.keys(k.pose.bones).forEach(n => boneNames.add(n)); Object.keys(k.pose.expr).forEach(n => exprNames.add(n)); if (k.pose.hips) anyHips = true; }
+  const boneNames = new Set(), exprNames = new Set(), posNames = new Set(); let anyHips = false;
+  for (const k of kfs) { Object.keys(k.pose.pos || {}).forEach(n => posNames.add(n)); Object.keys(k.pose.bones).forEach(n => boneNames.add(n)); Object.keys(k.pose.expr).forEach(n => exprNames.add(n)); if (k.pose.hips) anyHips = true; }
   boneNames.forEach(n => { bones[n] = track(k => k.pose.bones[n], REST[n] || [0, 0, 0]); });
+  posNames.forEach(n => { pos[n] = track(k => (k.pose.pos || {})[n], [0, 0, 0]); });
   exprNames.forEach(n => { expr[n] = track(k => k.pose.expr[n], 0); });
   if (anyHips) hips = track(k => k.pose.hips, [0, 0, 0]);
-  return { bones, expr, hips };
+  return { bones, expr, hips, pos };
 }
 
 // Frame limit (heat/battery): 30 fps while something moves, 10 fps when idle and nothing is being said.
@@ -97,7 +118,7 @@ function frame(now) {
   const k = 1 - Math.pow(0.001, dt), kb = st.blend <= 0 ? 1 : 1 - Math.exp(-dt / (st.blend / 1000 / 3));
   curMouth = lerp(curMouth, st.mouth, k); curGx = lerp(curGx, st.gx, k); curGy = lerp(curGy, st.gy, k);
   // Target = agent animation (if any) else the held pose, over the resting stance.
-  let target = { bones: st.pose.bones, expr: st.pose.expr, hips: st.pose.hips }, direct = false;
+  let target = { bones: st.pose.bones, expr: st.pose.expr, hips: st.pose.hips, pos: st.pose.pos || {} }, direct = false;
   if (st.anim && st.anim.keyframes.length) { target = sample(st.anim, now - animStart); direct = true; }
   const names = new Set([...Object.keys(REST), ...Object.keys(curBones), ...Object.keys(target.bones)]);
   const breathe = Math.sin(t * 1.6) * 0.012;
@@ -113,6 +134,8 @@ function frame(now) {
       set(n, x, y, z);
     });
     for (const n of ['spine', 'chest', 'neck', 'head']) if (!names.has(n)) { const x = (n === 'spine' || n === 'chest' ? breathe : 0) + (n === 'head' ? curGy * 0.15 : n === 'neck' ? curGy * 0.1 : 0); const y = n === 'head' ? -curGx * 0.3 : n === 'neck' ? -curGx * 0.2 : 0; set(n, x, y, 0); }
+    const pnames = new Set([...Object.keys(curPos), ...Object.keys(target.pos)]);
+    pnames.forEach(n => { const w = target.pos[n] || [0, 0, 0]; const c = curPos[n] || (curPos[n] = [0, 0, 0]); for (let i = 0; i < 3; i++) c[i] = direct ? w[i] : lerp(c[i], w[i], kb); setPos(n, c[0], c[1], c[2]); });
     const hips = bone('hips');
     if (hips) {
       if (restHipsY === null) restHipsY = hips.position.y;
