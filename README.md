@@ -19,6 +19,14 @@ Android app --OpenAI-compatible API (SSE)--> Hermes 127.0.0.1:8642 (chat, images
 ## Screenshots
 Everything below was captured from the real phone.
 
+| Happy | Love | Cry reaction |
+| --- | --- | --- |
+| ![](docs/screenshots/eyes-happy.png) | ![](docs/screenshots/eyes-love.png) | ![](docs/screenshots/eyes-cry.png) |
+
+| Angry | A card Hermes built (generative UI) | Hermes posed the avatar itself |
+| --- | --- | --- |
+| ![](docs/screenshots/eyes-angry.png) | ![](docs/screenshots/a2ui-card.png) | ![](docs/screenshots/hermes-posed-avatar.png) |
+
 | Avatar blushes when tapped | Tears (cry reaction) | Hearts (love mood) |
 | --- | --- | --- |
 | ![](docs/screenshots/avatar-tap-blush.png) | ![](docs/screenshots/avatar-tears.png) | ![](docs/screenshots/avatar-hearts.png) |

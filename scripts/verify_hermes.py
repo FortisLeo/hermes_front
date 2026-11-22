@@ -5,6 +5,7 @@ import json, os, subprocess, time
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG = "/data/data/com.termux/files/home/.hermes/logs/agent.log"
 CASES = [
+ (423, "Use your deskbot avatar tools: switch the face to the 3D avatar (avatar_mode), list its bones (avatar_bones), then pose it with avatar_pose so the right upper arm is raised (rightUpperArm z=1.4). Reply with one short sentence.", ["deskbot_avatar_mode", "deskbot_avatar_bones", "deskbot_avatar_pose"]),
  (214, "Give me a short spoken morning briefing using my calendar events for today and the current battery level. Use your deskbot tools.", ["deskbot_calendar_events", "deskbot_battery"]),
  (305, "Write a one-line daily journal entry saying 'verified journal flow' into /sdcard/Deskbot/journal.md using your deskbot file tools (append).", ["deskbot_file_write"]),
  (373, "Log an expense: 12.50 for coffee. Append the line 'coffee,12.50' to /sdcard/Deskbot/expenses.csv using your deskbot file tools.", ["deskbot_file_write"]),

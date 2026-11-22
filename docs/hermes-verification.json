@@ -206,5 +206,19 @@
    "deskbot_shell"
   ],
   "ok": true
+ },
+ "423": {
+  "prompt": "Use your deskbot avatar tools: switch the face to the 3D avatar (avatar_mode), list its bo",
+  "expected": [
+   "deskbot_avatar_mode",
+   "deskbot_avatar_bones",
+   "deskbot_avatar_pose"
+  ],
+  "called": [
+   "deskbot_avatar_bones",
+   "deskbot_avatar_mode",
+   "deskbot_avatar_pose"
+  ],
+  "ok": true
  }
 }
