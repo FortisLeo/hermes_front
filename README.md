@@ -55,3 +55,7 @@ With a rooted phone that already has Termux and Hermes installed, connected over
 ```
 
 Each step prints `ok` or `FAIL` and the rest still run. The Termux package step (`openssh rsync ffmpeg nmap tesseract`) takes a backup of `~/.hermes` first and never runs `pkg upgrade`. Afterwards restart the Hermes gateway so it sees the `deskbot_*` tools, and optionally install the Termux:Boot app so the watchdog starts at boot. Never put the API key or bridge token in the repo; the scripts read the token on the phone.
+
+## 3D avatar (VRM)
+
+Put a permissively licensed `.vrm` on the phone and import it with the `avatar_import` tool (CC0, CC-BY, CC-BY-SA and VRM "everyone" are accepted; others are rejected). `avatar_mode avatar` makes it the face. The agent poses it with `avatar_bones` (list every bone/node), `avatar_pose` and `avatar_animate` (keyframes); there are no built-in motions. `.vrma` clips are imported with `avatar_import_clip` and played with `avatar_clip`. Emotion effects (blush, tears, hearts) are drawn over the head, and taps react like on the eyes face. The viewer is three.js + three-vrm in a sandboxed WebView, limited to 30 fps (10 when idle); on a phone with little RAM it falls back to the eyes face after two unclean exits in a row.
