@@ -29,11 +29,12 @@ object ClockFormat {
 
 /** Quiet clock for the face: time, date and an optional status line (battery, Wi-Fi). Ticks itself every second. */
 @Composable
-fun FaceClock(extra: String, modifier: Modifier = Modifier, color: Color = Color(0x99FFFFFF), use24h: Boolean = true) {
+fun FaceClock(extra: String, modifier: Modifier = Modifier, color: Color = Color(0x99FFFFFF), use24h: Boolean = true, compact: Boolean = false) {
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
     LaunchedEffect(Unit) { while (true) { now = ZonedDateTime.now(); delay(1000L - System.currentTimeMillis() % 1000L) } }
-    Column(modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(ClockFormat.time(now, use24h), color = color, fontSize = 40.sp, fontWeight = FontWeight.Light)
-        Text(ClockFormat.line(now, extra), color = color.copy(alpha = color.alpha * 0.8f), fontSize = 14.sp)
+    val shadow = if (compact) androidx.compose.ui.graphics.Shadow(Color.Black, blurRadius = 6f) else null
+    Column(modifier.padding(if (compact) 12.dp else 16.dp), horizontalAlignment = if (compact) Alignment.Start else Alignment.CenterHorizontally) {
+        Text(ClockFormat.time(now, use24h), color = color, fontSize = if (compact) 26.sp else 40.sp, fontWeight = FontWeight.Light, style = androidx.compose.ui.text.TextStyle(shadow = shadow))
+        Text(ClockFormat.line(now, extra), color = color.copy(alpha = color.alpha * 0.8f), fontSize = if (compact) 12.sp else 14.sp, style = androidx.compose.ui.text.TextStyle(shadow = shadow))
     }
 }

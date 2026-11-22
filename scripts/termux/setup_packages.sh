@@ -7,7 +7,7 @@ tar -czf "$BK" -C "$HOME" --exclude=.hermes/cache --exclude=.hermes/audio_cache 
 # No `pkg upgrade`: it could replace libraries the running Hermes uses. Only add missing packages.
 for p in openssh rsync ffmpeg nmap tesseract; do
   if dpkg -s "$p" >/dev/null 2>&1; then echo "ok   $p already installed"
-  elif pkg install -y "$p" >"$HOME/pkg-$p.log" 2>&1; then echo "ok   installed $p"
+  elif DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef "$p" >"$HOME/pkg-$p.log" 2>&1; then echo "ok   installed $p"
   else echo "FAIL $p ($(tail -n 2 "$HOME/pkg-$p.log" | tr "\n" " "))"; fi
 done
 echo done
