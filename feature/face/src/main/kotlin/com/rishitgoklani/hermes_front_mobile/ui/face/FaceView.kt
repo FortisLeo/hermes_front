@@ -45,7 +45,7 @@ fun FaceView(
     onTap: () -> Unit = {}, onLongPress: () -> Unit = {}, backgroundColor: Color = Bg, mouth: Float = 0f,
 ) {
     val mouthAnim = remember { Animatable(0f) }
-    LaunchedEffect(mouth, bot) { mouthAnim.animateTo(if (bot == BotState.Speaking) mouth else 0f, tween(90)) }
+    LaunchedEffect(mouth, bot) { mouthAnim.animateTo(mouth, tween(90)) }
     val style = EyeStyles.compute(bot, face)
     val open = remember { Animatable(style.openness) }
     val lookX = remember { Animatable(style.lookX) }
@@ -99,8 +99,8 @@ fun FaceView(
             }
         }
         if (mouthAnim.value > 0.02f) {
-            val mw = eyeW * 0.5f; val mh = eyeW * 0.32f * mouthAnim.value
-            drawRoundRect(color, Offset(size.width / 2 + mx - mw / 2, cy + eyeH * 0.75f), Size(mw, mh.coerceAtLeast(4f)), CornerRadius(mw * 0.4f))
+            val mw = gap * 1.1f; val mh = eyeW * 0.3f * mouthAnim.value
+            drawRoundRect(color, Offset(size.width / 2 + mx - mw / 2, cy + eyeH * 0.2f), Size(mw, mh.coerceAtLeast(4f)), CornerRadius(mw * 0.4f))
         }
         drawEffects(style.effects, measurer, ang, eyeW, size.width / 2 + mx, cy, gap)
     }

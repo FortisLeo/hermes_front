@@ -21,6 +21,7 @@ for l in cat:
 assert len(feat) == 384, len(feat)
 
 BUILT = {
+ 424: "TTS word progress -> MouthShaper -> mouth on face (device-verified, screenshot)",
  41: "ui_tree, screenshot", 42: "ui_tree", 44: "ui_click, ui_tree", 45: "screen_state", 46: "ui_wait_for", 48: "screen_state",
  51: "overlay_text", 53: "overlay_highlight", 54: "Face tab full-screen, ui_show full", 56: "notification_post, overlay_text", 57: "overlay_text, screen_dim", 58: "screen_dim",
  61: "ui_click", 62: "ui_swipe", 65: "ui_global", 70: "vibrate",
@@ -62,7 +63,6 @@ PARTIAL = {
  335: "barge-in stops turn; resume logic is a skill", 336: "recipe uses vibrate/volume/tts", 337: "ambient_mode + sensors", 338: "audit-log mining recipe",
  394: "recipe",  
  412: "Toggle/Slider values local; apply via Button", 414: "overlay surface renders in Screens tab, not as a true window overlay",
- 424: "speaking bounce only; loudness-driven mouth not built", 
 }
 BLOCKED = {63: "multi-touch gestures disabled: a two-stroke gesture coincided with a HyperOS input-service crash (see memory)", 7: "no NFC hardware on this phone", 344: "no IR blaster on this phone", 275: "bootguard module not installed", 279: "needs a systemless module (not installed)", 
            399: "needs a boot-animation module", 398: "needs a font module", 118: "gesture classification unreliable; experimental recipe only",
