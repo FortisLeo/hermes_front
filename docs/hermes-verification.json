@@ -50,15 +50,15 @@
   "ok": true
  },
  "310": {
-  "prompt": "Add 'oat milk' to my shopping list by saving a quick note tagged 'shopping' with your desk",
+  "prompt": "Always call the deskbot quick_note tool now (even if a similar note exists): save a NEW no",
   "expected": [
    "deskbot_quick_note"
   ],
   "called": [
-   "deskbot_file_read",
-   "deskbot_notes_search"
+   "deskbot_notes_search",
+   "deskbot_quick_note"
   ],
-  "ok": false
+  "ok": true
  },
  "339": {
   "prompt": "Summarize what notifications I got recently using your deskbot notification history digest",
@@ -111,13 +111,13 @@
   "ok": true
  },
  "307": {
-  "prompt": "Look at the room with the back camera using your deskbot camera tool, and save a quick not",
+  "prompt": "Look at the room with the back camera using your deskbot camera tool, and then you MUST ca",
   "expected": [
    "deskbot_camera_capture",
    "deskbot_quick_note"
   ],
   "called": [
-   "deskbot_camera_capture",
+   "deskbot_quick_note",
    "deskbot_shell"
   ],
   "ok": false
