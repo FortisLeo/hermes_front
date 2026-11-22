@@ -140,7 +140,11 @@ class MainActivity : ComponentActivity() {
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
                 val av by container.avatar.state.collectAsStateWithLifecycle()
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes) }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
+                    Box(Modifier.fillMaxSize()) {
+                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes, onHead = { x, y, h -> head.value = Triple(x, y, h) })
+                        com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects, head.value.first, head.value.second, head.value.third)
+                    } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     overlay = {
                         if (liveScreen == null) { if (!inPip.value) { if (av.enabled) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {

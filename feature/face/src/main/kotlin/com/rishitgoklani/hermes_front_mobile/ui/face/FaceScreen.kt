@@ -36,7 +36,11 @@ fun FaceScreen(
 ) {
     var panel by remember { mutableStateOf(false) }
     Box(modifier.fillMaxSize()) {
-        if (faceContent != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }, onLongPress = { panel = !panel }) }) { faceContent() }
+        if (faceContent != null) Box(Modifier.fillMaxSize()) {
+            faceContent()
+            // Transparent layer on top: a WebView would swallow the touches, so taps and long-presses are caught here.
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }, onLongPress = { panel = !panel }) })
+        }
         else FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
         overlay()
         if (panel) {

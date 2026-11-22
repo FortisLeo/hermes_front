@@ -175,3 +175,19 @@ private fun DrawScope.drawEffects(effects: Set<Effect>, measurer: androidx.compo
         }
     }
 }
+
+
+/**
+ * The face's emotion effects (blush, tears, hearts, sparkles, zzz, ...) drawn over any other face, e.g. the 3D avatar.
+ * [headX]/[headY]/[headSize] are fractions of this view: where the head is and how tall it is.
+ */
+@Composable
+fun FaceEffectsOverlay(effects: Set<Effect>, headX: Float, headY: Float, headSize: Float, modifier: Modifier = Modifier) {
+    if (effects.isEmpty()) return
+    val phase by rememberInfiniteTransition(label = "fx").animateFloat(0f, 1f, infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart), label = "fxphase")
+    val measurer = rememberTextMeasurer()
+    Canvas(modifier.fillMaxSize()) {
+        val eyeW = size.height * headSize * 0.5f
+        drawEffects(effects, measurer, (phase * 2 * PI).toFloat(), eyeW, size.width * headX, size.height * headY, eyeW * 0.25f)
+    }
+}

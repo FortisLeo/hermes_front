@@ -51,6 +51,7 @@ new GLTFLoader().register(p => new VRMLoaderPlugin(p)).load('https://appassets.a
   vrm = g.userData.vrm; VRMUtils.rotateVRM0(vrm); scene.add(vrm.scene);
   vrm.scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(vrm.scene), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  modelTop = box.max.y;
   const half = THREE.MathUtils.degToRad(15);
   const dist = (size.y / 2) / Math.tan(half) * 1.08;
   camera.position.set(c.x, c.y, c.z + dist); camera.lookAt(c);
@@ -81,6 +82,8 @@ window.avatar.listBones = () => {
   return JSON.stringify([...names]);
 };
 
+const MOODS = ['happy','sad','angry','surprised','relaxed','neutral'];
+let headTick = 0, modelTop = 0;
 const ease = x => x * x * (3 - 2 * x);
 // Samples an agent animation at time t (ms): per bone/expression, ease between the keyframes that set it; before the first one it starts from rest.
 function sample(anim, t) {
@@ -153,7 +156,17 @@ function frame(now) {
       if (blinkT >= 0) { blinkT += dt; em.setValue('blink', Math.sin(Math.min(blinkT / 0.18, 1) * Math.PI)); if (blinkT > 0.18) { blinkT = -1; blinkAt = 2 + Math.random() * 3; em.setValue('blink', 0); } }
     }
   }
+  // Emotions: if the model defines an expression named like the face mood (happy, sad, angry, relaxed, surprised ...), drive it from the mood.
+  if (em && st.mood) { for (const m of MOODS) { if (em.getExpression && em.getExpression(m)) em.setValue(m, m === st.mood ? 0.8 : 0); } }
   vrm.update(dt); renderer.render(scene, camera); vctx.drawImage(renderer.domElement, 0, 0);
+  // Tell the app where the head is on screen so it can draw emotion effects (blush, tears, hearts) over it.
+  if ((++headTick % 6) === 0 && window.Native && Native.onHead) {
+    // Face centre ~45% of the way from the head bone to the top of the model; head height = that distance.
+    const h = bone('head'); if (h) { const p = h.getWorldPosition(new THREE.Vector3()), topY = Math.max(modelTop, p.y + 0.15);
+      const face = new THREE.Vector3(p.x, p.y + 0.45 * (topY - p.y), p.z), top = new THREE.Vector3(p.x, topY, p.z);
+      const a = face.project(camera), b = top.project(camera), c0 = p.clone().project(camera);
+      Native.onHead((a.x + 1) / 2, (1 - a.y) / 2, Math.abs(b.y - c0.y) / 2); }
+  }
 }
 
 requestAnimationFrame(frame);

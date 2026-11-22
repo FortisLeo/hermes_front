@@ -83,7 +83,7 @@ object PoseParser {
     /** One JSON message for the viewer page. Mouth is clamped 0..1, gaze -1..1. */
     fun toJson(s: AvatarState): String = buildJsonObject {
         put("enabled", s.enabled); put("mouth", s.mouth.coerceIn(0f, 1f)); put("gx", s.gazeX.coerceIn(-1f, 1f)); put("gy", s.gazeY.coerceIn(-1f, 1f))
-        put("clip", s.clip.filter { it.isLetterOrDigit() || it in "-_" }); put("blend", s.blendMs)
+        put("mood", s.mood.name.lowercase()); put("clip", s.clip.filter { it.isLetterOrDigit() || it in "-_" }); put("blend", s.blendMs)
         put("pose", poseJson(s.pose))
         put("anim", s.animation?.let { a -> buildJsonObject { put("loop", a.loop); put("keyframes", JsonArray(a.keyframes.map { k -> buildJsonObject { put("t", k.tMs); put("pose", poseJson(k.pose)) } })) } } ?: JsonNull)
     }.toString()

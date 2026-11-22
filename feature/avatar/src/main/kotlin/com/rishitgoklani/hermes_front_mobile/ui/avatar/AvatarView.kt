@@ -27,9 +27,10 @@ import java.io.File
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier, onNodes: (List<String>) -> Unit = {}) {
+fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier, onNodes: (List<String>) -> Unit = {}, onHead: (x: Float, y: Float, size: Float) -> Unit = { _, _, _ -> }) {
     val hasModel = File(avatarDir, "model.vrm").isFile
     if (!hasModel) { Box(modifier.fillMaxSize(), Alignment.Center) { Text("No avatar model. Put a .vrm at ${avatarDir.path}/model.vrm", color = Color.Gray) }; return }
+    val headCallback = androidx.compose.runtime.rememberUpdatedState(onHead)
     var web by remember { mutableStateOf<WebView?>(null) }
     val latest = androidx.compose.runtime.rememberUpdatedState(state)
     AndroidView(modifier = modifier.fillMaxSize(), factory = { ctx ->
@@ -38,6 +39,7 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
             .addPathHandler("/model/", WebViewAssetLoader.InternalStoragePathHandler(ctx, avatarDir.also { it.mkdirs() }))
             .build()
         WebView(ctx).apply {
+            addJavascriptInterface(object { @android.webkit.JavascriptInterface fun onHead(x: Double, y: Double, h: Double) { post { headCallback.value(x.toFloat(), y.toFloat(), h.toFloat()) } } }, "Native")
             settings.javaScriptEnabled = true; settings.allowFileAccess = false; settings.allowContentAccess = false; settings.blockNetworkLoads = false
             webViewClient = object : WebViewClient() {
                 // The page may finish loading after the first state was pushed, so send the latest state again.
