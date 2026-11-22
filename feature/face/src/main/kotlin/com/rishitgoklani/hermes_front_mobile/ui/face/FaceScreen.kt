@@ -12,6 +12,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,12 +31,13 @@ import com.rishitgoklani.hermes_front_mobile.domain.face.FaceState
 @Composable
 fun FaceScreen(
     bot: BotState, face: FaceState, quickActions: List<QuickAction>, onAction: (QuickAction) -> Unit, onTap: () -> Unit,
-    modifier: Modifier = Modifier, backgroundColor: Color = Color(0xFF05070A), mouth: Float = 0f,
+    modifier: Modifier = Modifier, backgroundColor: Color = Color(0xFF05070A), mouth: Float = 0f, faceContent: (@Composable () -> Unit)? = null,
     overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
 ) {
     var panel by remember { mutableStateOf(false) }
     Box(modifier.fillMaxSize()) {
-        FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
+        if (faceContent != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }, onLongPress = { panel = !panel }) }) { faceContent() }
+        else FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
         overlay()
         if (panel) {
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

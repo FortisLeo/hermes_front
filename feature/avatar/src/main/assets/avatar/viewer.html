@@ -53,8 +53,8 @@ function frame() {
   headX += cur.gy * 0.25;
   // arms rest pose: hang down, slightly out; mood lifts them
   let lUA = 1.25 - cur.arms * 0.9, rUA = -1.25 + cur.arms * 0.9, lLA = 0, rLA = 0, lUAy = 0, rUAy = 0;
-  if (a === 'wave') { rUA = 2.3; rLA = Math.sin(e * 9) * 0.6 + 0.3; headZ += 0.1; }
-  if (a === 'cheer') { lUA = -2.5 - Math.sin(e * 8) * 0.15; rUA = 2.5 + Math.sin(e * 8) * 0.15; hipsY = Math.abs(Math.sin(e * 8)) * 0.04; }
+  if (a === 'wave') { rUA = 1.35; rLA = Math.sin(e * 9) * 0.5 + 0.5; headZ += 0.1; }
+  if (a === 'cheer') { lUA = -1.9 - Math.sin(e * 8) * 0.15; rUA = 1.9 + Math.sin(e * 8) * 0.15; hipsY = Math.abs(Math.sin(e * 8)) * 0.04; }
   if (a === 'dance') {
     const b = e * 6; hipsRz = Math.sin(b) * 0.12; hipsY = Math.abs(Math.sin(b)) * 0.03; spineX += Math.sin(b * 2) * 0.05;
     lUA = -1.0 - Math.sin(b) * 0.9; rUA = 1.0 - Math.sin(b + Math.PI) * 0.9; lLA = Math.sin(b) * 0.4; rLA = -Math.sin(b) * 0.4; headZ += Math.sin(b) * 0.12;

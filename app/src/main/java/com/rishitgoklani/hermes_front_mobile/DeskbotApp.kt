@@ -172,6 +172,8 @@ class AppContainer(private val app: Application) {
     private val placeTracker = com.rishitgoklani.hermes_front_mobile.domain.sense.PlaceTracker()
     private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     init {
+        avatar.setEnabled(prefs.getBoolean("avatar_mode", false))
+        scope.launch { avatar.state.collect { prefs.edit().putBoolean("avatar_mode", it.enabled).apply() } }
         scope.launch { face.state.collect { avatar.setMood(it.mood); avatar.look(it.lookX, it.lookY) } }
         scope.launch { tts.openness.collect { avatar.setMouth(it) } }
     }

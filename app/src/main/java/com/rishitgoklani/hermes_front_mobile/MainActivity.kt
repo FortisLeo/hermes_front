@@ -139,7 +139,8 @@ class MainActivity : ComponentActivity() {
             },
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
-                FaceScreen(bot, face, actions, mouth = mouth, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
+                val av by container.avatar.state.collectAsStateWithLifecycle()
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir) }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     overlay = {
                         if (liveScreen == null) FaceClock(statusLine, Modifier.align(Alignment.BottomCenter))
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {

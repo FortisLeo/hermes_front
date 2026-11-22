@@ -12,7 +12,7 @@ import kotlinx.serialization.json.jsonPrimitive
 /** Body animations the 3D avatar can play. Procedural, so any humanoid VRM works without clips. */
 enum class AvatarAction { Idle, Wave, Dance, Cheer, Bow, Nod }
 
-data class AvatarState(val mood: Mood = Mood.Neutral, val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f, val action: AvatarAction = AvatarAction.Idle)
+data class AvatarState(val enabled: Boolean = false, val mood: Mood = Mood.Neutral, val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f, val action: AvatarAction = AvatarAction.Idle)
 
 /** Body language per mood: head tilt/nod (radians), arm raise (0 down .. 1 up), slouch (0..1), bounce speed. */
 data class MoodPose(val headTilt: Float, val headNod: Float, val armRaise: Float, val slouch: Float, val bounce: Float)
@@ -32,7 +32,7 @@ object AvatarMapper {
     fun toJson(s: AvatarState): String {
         val p = pose(s.mood)
         fun f(v: Float) = "%.3f".format(java.util.Locale.ROOT, v)
-        return """{"mood":"${s.mood.name.lowercase()}","mouth":${f(s.mouth.coerceIn(0f, 1f))},"gx":${f(s.gazeX.coerceIn(-1f, 1f))},"gy":${f(s.gazeY.coerceIn(-1f, 1f))},"action":"${s.action.name.lowercase()}","tilt":${f(p.headTilt)},"nod":${f(p.headNod)},"arms":${f(p.armRaise)},"slouch":${f(p.slouch)},"bounce":${f(p.bounce)}}"""
+        return """{"enabled":${s.enabled},"mood":"${s.mood.name.lowercase()}","mouth":${f(s.mouth.coerceIn(0f, 1f))},"gx":${f(s.gazeX.coerceIn(-1f, 1f))},"gy":${f(s.gazeY.coerceIn(-1f, 1f))},"action":"${s.action.name.lowercase()}","tilt":${f(p.headTilt)},"nod":${f(p.headNod)},"arms":${f(p.armRaise)},"slouch":${f(p.slouch)},"bounce":${f(p.bounce)}}"""
     }
 }
 
@@ -40,6 +40,7 @@ object AvatarMapper {
 class AvatarController {
     private val _state = MutableStateFlow(AvatarState())
     val state: StateFlow<AvatarState> = _state
+    fun setEnabled(v: Boolean) = _state.update { it.copy(enabled = v) }
     fun setMood(m: Mood) = _state.update { it.copy(mood = m) }
     fun setMouth(v: Float) = _state.update { it.copy(mouth = v) }
     fun look(x: Float?, y: Float?) = _state.update { it.copy(gazeX = x ?: 0f, gazeY = y ?: 0f) }
@@ -47,10 +48,12 @@ class AvatarController {
 }
 
 fun avatarCapability(avatar: AvatarController) = Capability(
-    "avatar_action", "Make the 3D avatar do a body action: wave, dance, cheer, bow, nod or idle (stops the action).",
-    """{"type":"object","properties":{"action":{"type":"string","enum":["idle","wave","dance","cheer","bow","nod"]}},"required":["action"]}""",
+    "avatar_action", "3D avatar: action = wave, dance, cheer, bow, nod or idle (stops the action); mode = avatar (show the 3D avatar as the face) or eyes (back to the eyes face).",
+    """{"type":"object","properties":{"action":{"type":"string","enum":["idle","wave","dance","cheer","bow","nod"]},"mode":{"type":"string","enum":["avatar","eyes"]}}}""",
 ) { a ->
-    val name = a["action"]?.jsonPrimitive?.contentOrNull ?: return@Capability ActionResult.failed("action required")
+    val mode = a["mode"]?.jsonPrimitive?.contentOrNull
+    if (mode != null) { if (mode != "avatar" && mode != "eyes") return@Capability ActionResult.failed("mode must be avatar or eyes"); avatar.setEnabled(mode == "avatar") }
+    val name = a["action"]?.jsonPrimitive?.contentOrNull ?: return@Capability if (mode != null) ActionResult.completed("Face mode: $mode") else ActionResult.failed("give action or mode")
     val act = AvatarAction.entries.firstOrNull { it.name.equals(name, true) } ?: return@Capability ActionResult.failed("unknown action '$name'")
     avatar.act(act); ActionResult.completed(if (act == AvatarAction.Idle) "Avatar idle" else "Avatar ${act.name.lowercase()}")
 }
