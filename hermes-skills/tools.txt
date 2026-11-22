@@ -102,3 +102,5 @@ lock_display
 avatar_action
 avatar_import
 face_bubble
+overlay_draw
+pip_face

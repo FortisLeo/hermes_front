@@ -21,6 +21,8 @@ for l in cat:
 assert len(feat) == 384, len(feat)
 
 BUILT = {
+ 55: "pip_face: the Deskbot face in a floating picture-in-picture window",
+ 60: "overlay_draw: circles, boxes, arrows, labels over any app (parser unit-tested)",
  52: "face_bubble: draggable overlay face above other apps, mood-driven, tap opens the app",
  423: "avatar_action + avatar_import (VRM license check: CC0/CC-BY/CC-BY-SA/everyone only) + AvatarView (three-vrm, sandboxed WebView, 30/10 fps limit); CoolBanana.vrm (CC0) imports, renders, dances on device (canvas snapshot)",
  424: "TTS word progress -> MouthShaper -> mouth on face ",
@@ -50,7 +52,7 @@ BUILT = {
  429: "15 moods, 18 reactions, fallbacks", 430: "effects layer", 431: "<expr/> tags in chat+voice",
 }
 PARTIAL = {
- 43: "screenshot + vision OCR works; Termux tesseract optional", 47: "screenshot + vision", 55: "PiP only via apps", 59: "notification_post; custom AOD not built",
+ 43: "screenshot + vision OCR works; Termux tesseract optional", 47: "screenshot + vision", 59: "notification_post; custom AOD not built",
  66: "volume/media keys; others need root shell",
  82: "app_stop soft stop; force-stop needs root shell", 91: "app_info shows grants; pm grant needs root shell", 104: "notifications_list + model ranking", 
  114: "vision decode; zbar optional", 115: "vision counting", 116: "visual_watch: capture->thumbnail->diff pipeline verified on device (static scene diff 0.3, no false alarm); detector unit-tested; no live positive event produced", 119: "time-lapse recipe; video via stock camera UI",
@@ -68,7 +70,7 @@ PARTIAL = {
 }
 BLOCKED = {63: "multi-touch gestures disabled: a two-stroke gesture coincided with a HyperOS input-service crash (see memory)", 7: "no NFC hardware on this phone", 344: "no IR blaster on this phone", 275: "bootguard module not installed", 279: "needs a systemless module (not installed)", 
            399: "needs a boot-animation module", 398: "needs a font module", 118: "gesture classification unreliable; experimental recipe only",
-           347: "needs external hardware", 348: "needs external hardware", 422: "Live2D engine/assets not built", 60: "annotation canvas not built",
+           347: "needs external hardware", 348: "needs external hardware", 422: "Live2D engine/assets not built",
            320: "teach-by-demonstration is experimental (recipe only)", 304: "screen-recall is a recipe; privacy-gated"}
 import json
 hver = {}

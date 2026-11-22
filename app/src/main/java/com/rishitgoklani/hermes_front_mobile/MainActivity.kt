@@ -142,7 +142,7 @@ class MainActivity : ComponentActivity() {
                 val av by container.avatar.state.collectAsStateWithLifecycle()
                 FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir) }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     overlay = {
-                        if (liveScreen == null) FaceClock(statusLine, Modifier.align(Alignment.BottomCenter))
+                        if (liveScreen == null) { if (!inPip.value) FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) }
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {
                             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))) {
                                 Column {
@@ -183,8 +183,14 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 28) window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
     }
 
+    private val inPip = androidx.compose.runtime.mutableStateOf(false)
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) { super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig); inPip.value = isInPictureInPictureMode }
+
+    override fun onDestroy() { container.pipRequest = null; super.onDestroy() }
+
     override fun onResume() {
         super.onResume()
+        container.pipRequest = { runCatching { enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(1, 1)).build()) }.getOrDefault(false) }
         val locked = container.showWhenLocked()
         setShowWhenLocked(locked); setTurnScreenOn(locked)
     }

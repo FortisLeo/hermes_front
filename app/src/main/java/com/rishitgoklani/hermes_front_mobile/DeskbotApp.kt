@@ -78,6 +78,8 @@ class AppContainer(private val app: Application) {
     private val tts = AndroidSpeechSynthesizer(app)
     val speaker: SpeechSynthesizer get() = tts
     val mouth: com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource get() = tts
+    /** Set by MainActivity while it exists; asks it to enter picture-in-picture. */
+    @Volatile var pipRequest: (() -> Boolean)? = null
     val avatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController()
     val avatarDir: File get() = File(app.filesDir, "avatar")
     val audit = FileAuditLog(File(app.filesDir, "audit.log"))
@@ -155,7 +157,7 @@ class AppContainer(private val app: Application) {
         AndroidFaceCounter(), kill, routines, ambient, selfChecks, a2ui,
         { surface -> _screenRequests.tryEmit(surface); runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
         Triple({ prefs.getBoolean("show_locked", false) }, { v: Boolean -> prefs.edit().putBoolean("show_locked", v).apply() }, { runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }),
-        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar))
+        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
     val engine = RoutineEngine(routines, runCapability, audit = audit)

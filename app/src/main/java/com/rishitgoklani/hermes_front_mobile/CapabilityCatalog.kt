@@ -82,6 +82,7 @@ class CatalogDeps(
     val macros: com.rishitgoklani.hermes_front_mobile.domain.macro.MacroRecorder, val runCapability: () -> com.rishitgoklani.hermes_front_mobile.domain.behavior.RunCapability,
     val registry: () -> CapabilityRegistry,
     val onFaceSeen: () -> Unit = {},
+    val pip: () -> (() -> Boolean)? = { null },
     val avatar: com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController? = null,
 )
 
@@ -106,6 +107,11 @@ object CapabilityCatalog {
             addAll(sensorCapabilities(app)); add(locationCapability(app)); add(networkInfoCapability(app))
             addAll(mediaCapabilities(app)); add(hapticsCapability(app)); add(alarmCapability(app)); addAll(overlayCapabilities(app, overlay))
             add(highlightCapability(app, HighlightOverlay(app), ui))
+            add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.pipFaceCapability {
+                if (d.pip() == null) { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)); delay(1500) }
+                d.pip()?.invoke() ?: false
+            })
+            add(com.rishitgoklani.hermes_front_mobile.data.capabilities.drawOverlayCapability(app, com.rishitgoklani.hermes_front_mobile.data.capabilities.DrawOverlay(app)))
             add(com.rishitgoklani.hermes_front_mobile.data.capabilities.faceBubbleCapability(com.rishitgoklani.hermes_front_mobile.data.capabilities.FaceBubble(app, d.face, d.scope, android.content.Intent(app, MainActivity::class.java))))
             addAll(calendarCapabilities(app)); addAll(contactCapabilities(app)); addAll(fileCapabilities(sandbox)); add(httpRequestCapability())
             addAll(timerCapabilities(TimerBook(), timers) { name -> d.tts.enqueue("Your $name timer is done."); poster.post("Timer done", name) })
