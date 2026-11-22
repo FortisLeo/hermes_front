@@ -47,6 +47,20 @@ class AndroidFaceCounter : FaceCounter {
     }
 }
 
+/** Finds the first face's centre (position only). Same decode path as [AndroidFaceCounter]. */
+class AndroidFaceLocator : com.rishitgoklani.hermes_front_mobile.domain.sense.FaceLocator {
+    override suspend fun locate(jpeg: ByteArray): com.rishitgoklani.hermes_front_mobile.domain.sense.FacePoint? = withContext(Dispatchers.Default) {
+        val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565; inSampleSize = 2 }
+        val bmp = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, opts) ?: return@withContext null
+        val w = bmp.width - bmp.width % 2
+        val b = if (w != bmp.width) Bitmap.createBitmap(bmp, 0, 0, w, bmp.height) else bmp
+        val found = arrayOfNulls<FaceDetector.Face>(1)
+        if (FaceDetector(b.width, b.height, 1).findFaces(b, found) < 1) return@withContext null
+        val m = android.graphics.PointF().also { found[0]!!.getMidPoint(it) }
+        com.rishitgoklani.hermes_front_mobile.domain.sense.FacePoint(m.x / b.width, m.y / b.height)
+    }
+}
+
 /** Ambient-light brightness loop: every [periodMs] read lux, apply brightness when the change passes hysteresis. */
 class AmbientController(private val context: Context, private val scope: CoroutineScope, private val periodMs: Long = 15_000) {
     private val mapper = AmbientBrightness()

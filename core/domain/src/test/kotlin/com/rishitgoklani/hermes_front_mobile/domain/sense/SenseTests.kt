@@ -47,6 +47,15 @@ class SenseTests {
     }
 
     private fun args() = JsonObject(emptyMap())
+    @Test fun gazeMapperMirrorsXAndCentres() {
+        assertEquals(0f to 0f, com.rishitgoklani.hermes_front_mobile.domain.sense.GazeMapper.toGaze(com.rishitgoklani.hermes_front_mobile.domain.sense.FacePoint(0.5f, 0.5f)))
+        assertEquals(1f to -1f, com.rishitgoklani.hermes_front_mobile.domain.sense.GazeMapper.toGaze(com.rishitgoklani.hermes_front_mobile.domain.sense.FacePoint(0f, 0f)))
+    }
+    @Test fun presenceTurnsEyesTowardFace() = runBlocking {
+        var got: Pair<Float, Float>? = null
+        presenceCapability(FakeCamera(byteArrayOf(1)), { 1 }, { com.rishitgoklani.hermes_front_mobile.domain.sense.FacePoint(0.25f, 0.5f) }) { x, y -> got = x to y }.executor.execute(args())
+        assertEquals(0.5f to 0f, got)
+    }
     @Test fun presenceReportsFaceCountOnly() = runBlocking {
         val r = presenceCapability(FakeCamera(byteArrayOf(1))) { 2 }.executor.execute(args()); assertEquals("completed", r.status); assertTrue(r.data!!["present"]!!.jsonPrimitive.content.toBoolean()); assertEquals("2", r.data!!["faces"]!!.jsonPrimitive.content)
         assertTrue(presenceCapability(FakeCamera(byteArrayOf(1))) { 0 }.executor.execute(args()).message.contains("Nobody"))
