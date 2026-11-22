@@ -1,0 +1,4 @@
+<resources>
+    <string name="deskbot_a11y_label">Deskbot</string>
+    <string name="deskbot_a11y_description">Lets the Deskbot assistant read the screen and perform taps, swipes and typing on this dedicated device.</string>
+</resources>

@@ -1,0 +1,218 @@
+{
+ "214": {
+  "prompt": "Give me a short spoken morning briefing using my calendar events for today and the current",
+  "expected": [
+   "deskbot_calendar_events",
+   "deskbot_battery"
+  ],
+  "called": [
+   "deskbot_battery",
+   "deskbot_calendar_events",
+   "deskbot_tts_say"
+  ],
+  "ok": true
+ },
+ "305": {
+  "prompt": "Write a one-line daily journal entry saying 'verified journal flow' into /sdcard/Deskbot/j",
+  "expected": [
+   "deskbot_file_write"
+  ],
+  "called": [
+   "deskbot_file_read",
+   "deskbot_file_write"
+  ],
+  "ok": true
+ },
+ "373": {
+  "prompt": "Log an expense: 12.50 for coffee. Append the line 'coffee,12.50' to /sdcard/Deskbot/expens",
+  "expected": [
+   "deskbot_file_write"
+  ],
+  "called": [
+   "deskbot_file_read",
+   "deskbot_file_write"
+  ],
+  "ok": true
+ },
+ "303": {
+  "prompt": "Save this note to my knowledge base with your deskbot quick note tool: 'router admin page ",
+  "expected": [
+   "deskbot_quick_note",
+   "deskbot_notes_search"
+  ],
+  "called": [
+   "deskbot_file_list",
+   "deskbot_file_read",
+   "deskbot_file_search",
+   "deskbot_file_write"
+  ],
+  "ok": false
+ },
+ "310": {
+  "prompt": "Add 'oat milk' to my shopping list by saving a quick note tagged 'shopping' with your desk",
+  "expected": [
+   "deskbot_quick_note"
+  ],
+  "called": [
+   "deskbot_file_list",
+   "deskbot_file_read",
+   "deskbot_file_write"
+  ],
+  "ok": false
+ },
+ "339": {
+  "prompt": "Summarize what notifications I got recently using your deskbot notification history digest",
+  "expected": [
+   "deskbot_notification_history"
+  ],
+  "called": [
+   "deskbot_notification_history",
+   "deskbot_notifications_list"
+  ],
+  "ok": true
+ },
+ "300": {
+  "prompt": "Run your deskbot self test and tell me if anything fails.",
+  "expected": [
+   "deskbot_self_test"
+  ],
+  "called": [
+   "deskbot_self_test"
+  ],
+  "ok": true
+ },
+ "186": {
+  "prompt": "What is the phone's health score right now? Use your deskbot health score tool.",
+  "expected": [
+   "deskbot_health_score"
+  ],
+  "called": [
+   "deskbot_battery",
+   "deskbot_network_info",
+   "deskbot_screenshot",
+   "deskbot_shell"
+  ],
+  "ok": false
+ },
+ "316": {
+  "prompt": "Run a quick regression: call deskbot battery, deskbot screen_state, deskbot http_request t",
+  "expected": [
+   "deskbot_battery",
+   "deskbot_screen_state",
+   "deskbot_http_request",
+   "deskbot_file_write",
+   "deskbot_file_read"
+  ],
+  "called": [
+   "deskbot_battery",
+   "deskbot_file_read",
+   "deskbot_file_write",
+   "deskbot_http_request",
+   "deskbot_screen_state",
+   "deskbot_shell"
+  ],
+  "ok": true
+ },
+ "307": {
+  "prompt": "Look at the room with the back camera using your deskbot camera tool, and save a quick not",
+  "expected": [
+   "deskbot_camera_capture",
+   "deskbot_quick_note"
+  ],
+  "called": [
+   "deskbot_app_list",
+   "deskbot_app_open",
+   "deskbot_camera_capture",
+   "deskbot_file_list",
+   "deskbot_file_read",
+   "deskbot_screen_state",
+   "deskbot_shell"
+  ],
+  "ok": false
+ },
+ "222": {
+  "prompt": "Start a 15 second timer called pasta with your deskbot timer tool and then list the runnin",
+  "expected": [
+   "deskbot_timer_start",
+   "deskbot_timer_list"
+  ],
+  "called": [
+   "deskbot_shell",
+   "deskbot_timer_list",
+   "deskbot_timer_start"
+  ],
+  "ok": true
+ },
+ "321": {
+  "prompt": "Make your face sleepy using your deskbot face tool, then switch the persona to night-owl.",
+  "expected": [
+   "deskbot_face_set",
+   "deskbot_persona_set"
+  ],
+  "called": [
+   "deskbot_app_list",
+   "deskbot_face_set",
+   "deskbot_persona_list",
+   "deskbot_persona_set",
+   "deskbot_shell"
+  ],
+  "ok": true
+ },
+ "411": {
+  "prompt": "Show a screen on the phone titled 'Hello' with one Button that dismisses it, using your de",
+  "expected": [
+   "deskbot_ui_show"
+  ],
+  "called": [
+   "deskbot_app_info",
+   "deskbot_app_open",
+   "deskbot_face_tweak",
+   "deskbot_file_write",
+   "deskbot_screenshot",
+   "deskbot_shell",
+   "deskbot_ui_clear",
+   "deskbot_ui_click",
+   "deskbot_ui_show",
+   "deskbot_ui_tree"
+  ],
+  "ok": true
+ },
+ "178": {
+  "prompt": "Download https://example.com into /sdcard/Deskbot/dl.html with your deskbot download tool ",
+  "expected": [
+   "deskbot_download_file",
+   "deskbot_file_hash"
+  ],
+  "called": [
+   "deskbot_file_write",
+   "deskbot_http_request",
+   "deskbot_shell",
+   "deskbot_ui_click",
+   "deskbot_ui_show",
+   "deskbot_ui_tree"
+  ],
+  "ok": false
+ },
+ "176": {
+  "prompt": "Send a Wake-on-LAN packet to MAC 00:11:22:33:44:55 using your deskbot tool.",
+  "expected": [
+   "deskbot_wake_on_lan"
+  ],
+  "called": [
+   "deskbot_network_info",
+   "deskbot_ui_tree"
+  ],
+  "ok": false
+ },
+ "172": {
+  "prompt": "Scan my local network for devices using your deskbot lan scan tool and list what you find.",
+  "expected": [
+   "deskbot_lan_scan"
+  ],
+  "called": [
+   "deskbot_network_info",
+   "deskbot_shell"
+  ],
+  "ok": false
+ }
+}

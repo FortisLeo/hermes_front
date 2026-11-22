@@ -1,0 +1,478 @@
+{
+ "1": {
+  "cmd": "svc bluetooth enable; sleep 3; V=$(settings get global bluetooth_on); svc bluetooth disable; sleep 2",
+  "ok": true
+ },
+ "2": {
+  "cmd": "cmd wifi list-networks | head -3",
+  "ok": true
+ },
+ "3": {
+  "cmd": "dumpsys bluetooth_manager | head -3",
+  "ok": true
+ },
+ "4": {
+  "cmd": "cmd wifi status | head -3",
+  "ok": true
+ },
+ "5": {
+  "cmd": "settings get global private_dns_mode",
+  "ok": true
+ },
+ "9": {
+  "cmd": "cmd netpolicy list restrict-background-whitelist | head -2",
+  "ok": true
+ },
+ "12": {
+  "cmd": "OLD=$(settings get system screen_off_timeout); settings put system screen_off_timeout 600000; N=$(se",
+  "ok": true
+ },
+ "13": {
+  "cmd": "cmd uimode night",
+  "ok": true
+ },
+ "14": {
+  "cmd": "settings get system haptic_feedback_enabled",
+  "ok": true
+ },
+ "15": {
+  "cmd": "date; settings get global auto_time",
+  "ok": true
+ },
+ "16": {
+  "cmd": "cmd role get-role-holders android.app.role.HOME",
+  "ok": true
+ },
+ "17": {
+  "cmd": "cmd notification set_dnd off; settings get global zen_mode",
+  "ok": true
+ },
+ "18": {
+  "cmd": "settings get system screen_off_timeout",
+  "ok": true
+ },
+ "19": {
+  "cmd": "settings list system | head -3",
+  "ok": true
+ },
+ "21": {
+  "cmd": "settings get global development_settings_enabled",
+  "ok": true
+ },
+ "22": {
+  "cmd": "settings get global adb_enabled",
+  "ok": true
+ },
+ "23": {
+  "cmd": "settings get global window_animation_scale",
+  "ok": true
+ },
+ "24": {
+  "cmd": "settings get global stay_on_while_plugged_in",
+  "ok": true
+ },
+ "25": {
+  "cmd": "setprop debug.hwui.overdraw false; getprop debug.hwui.overdraw",
+  "ok": true
+ },
+ "26": {
+  "cmd": "device_config get activity_manager max_phantom_processes; echo rc=$?",
+  "ok": true
+ },
+ "27": {
+  "cmd": "appops get com.rishitgoklani.hermes_front_mobile android:mock_location",
+  "ok": true
+ },
+ "28": {
+  "cmd": "getprop sys.usb.config",
+  "ok": true
+ },
+ "30": {
+  "cmd": "settings list global | grep -c -E 'adb|development|animation|stay_on'",
+  "ok": true
+ },
+ "31": {
+  "cmd": "settings get secure enabled_accessibility_services",
+  "ok": true
+ },
+ "32": {
+  "cmd": "dumpsys accessibility | head -3",
+  "ok": true
+ },
+ "33": {
+  "cmd": "settings get secure accessibility_button_targets; settings get secure odi_captions_enabled",
+  "ok": true
+ },
+ "34": {
+  "cmd": "settings get secure accessibility_display_inversion_enabled",
+  "ok": true
+ },
+ "35": {
+  "cmd": "settings get system font_scale",
+  "ok": true
+ },
+ "36": {
+  "cmd": "settings get secure accessibility_shortcut_enabled; settings get secure accessibility_shortcut_targe",
+  "ok": true
+ },
+ "37": {
+  "cmd": "settings get secure long_press_timeout",
+  "ok": true
+ },
+ "38": {
+  "cmd": "settings get system master_mono",
+  "ok": true
+ },
+ "40": {
+  "cmd": "dumpsys accessibility | grep -c Service",
+  "ok": true
+ },
+ "66": {
+  "cmd": "input keyevent KEYCODE_VOLUME_UP; echo sent",
+  "ok": true
+ },
+ "74": {
+  "cmd": "ime list -s | head -3",
+  "ok": true
+ },
+ "81": {
+  "cmd": "monkey -p com.android.settings 1 2>&1 | tail -1",
+  "ok": true
+ },
+ "82": {
+  "cmd": "am force-stop com.android.settings; echo stopped",
+  "ok": true
+ },
+ "83": {
+  "cmd": "pm path com.termux",
+  "ok": true
+ },
+ "84": {
+  "cmd": "dumpsys package com.termux | grep -m1 versionName",
+  "ok": true
+ },
+ "85": {
+  "cmd": "pm list packages -d | head -3",
+  "ok": true
+ },
+ "86": {
+  "cmd": "pm list packages -3 | head -3",
+  "ok": true
+ },
+ "87": {
+  "cmd": "dumpsys activity recents | head -3",
+  "ok": true
+ },
+ "88": {
+  "cmd": "cmd package resolve-activity --brief -a android.intent.action.VIEW -d https://example.com | head -3",
+  "ok": true
+ },
+ "89": {
+  "cmd": "logcat -d -b crash -t 3 | head -3; echo rc=$?",
+  "ok": true
+ },
+ "90": {
+  "cmd": "dumpsys deviceidle whitelist | head -3",
+  "ok": true
+ },
+ "91": {
+  "cmd": "pm grant com.rishitgoklani.hermes_front_mobile android.permission.CAMERA; echo rc=$?",
+  "ok": true
+ },
+ "92": {
+  "cmd": "appops get com.rishitgoklani.hermes_front_mobile | head -3",
+  "ok": true
+ },
+ "93": {
+  "cmd": "du -sk /data/data/com.termux/cache 2>/dev/null | tail -1; echo rc=0",
+  "ok": true
+ },
+ "94": {
+  "cmd": "ls -A /data/data/com.termux/files/home | head -3",
+  "ok": true
+ },
+ "95": {
+  "cmd": "ls /data/app | head -2",
+  "ok": true
+ },
+ "96": {
+  "cmd": "cp /data/data/com.termux/files/home/.hermes/SOUL.md /sdcard/dt_soul.md && ls -l /sdcard/dt_soul.md &",
+  "ok": true
+ },
+ "97": {
+  "cmd": "dumpsys diskstats | head -4",
+  "ok": true
+ },
+ "98": {
+  "cmd": "appops get com.termux POST_NOTIFICATION",
+  "ok": true
+ },
+ "99": {
+  "cmd": "cmd netpolicy get restrict-background",
+  "ok": true
+ },
+ "100": {
+  "cmd": "sha256sum $(pm path com.termux | head -1 | cut -d: -f2) | cut -c1-16",
+  "ok": true
+ },
+ "110": {
+  "cmd": "dumpsys notification --noredact | grep -m3 -i importance",
+  "ok": true
+ },
+ "123": {
+  "cmd": "settings get secure tts_default_rate",
+  "ok": true
+ },
+ "134": {
+  "cmd": "screencap -p /sdcard/deskbot_test.png && ls -l /sdcard/deskbot_test.png && rm /sdcard/deskbot_test.p",
+  "ok": true
+ },
+ "135": {
+  "cmd": "screenrecord --time-limit 2 /sdcard/deskbot_test.mp4 && ls -l /sdcard/deskbot_test.mp4 && rm /sdcard",
+  "ok": true
+ },
+ "138": {
+  "cmd": "ls /sdcard/Pictures | head -2; echo rc=0",
+  "ok": true
+ },
+ "141": {
+  "cmd": "input keyevent KEYCODE_WAKEUP; echo woke",
+  "ok": true
+ },
+ "142": {
+  "cmd": "svc power --help 2>&1 | head -1",
+  "ok": true
+ },
+ "143": {
+  "cmd": "settings get system accelerometer_rotation",
+  "ok": true
+ },
+ "144": {
+  "cmd": "wm size; wm density",
+  "ok": true
+ },
+ "145": {
+  "cmd": "dumpsys display | grep -m2 -i refresh",
+  "ok": true
+ },
+ "146": {
+  "cmd": "settings get secure doze_always_on; echo rc=0",
+  "ok": true
+ },
+ "147": {
+  "cmd": "settings get secure night_display_activated",
+  "ok": true
+ },
+ "148": {
+  "cmd": "which reboot; echo guarded",
+  "ok": true
+ },
+ "150": {
+  "cmd": "dumpsys activity activities | grep -m2 -i windowingMode",
+  "ok": true
+ },
+ "151": {
+  "cmd": "dumpsys battery | head -6",
+  "ok": true
+ },
+ "153": {
+  "cmd": "am get-standby-bucket com.termux",
+  "ok": true
+ },
+ "154": {
+  "cmd": "dumpsys batterystats | head -3",
+  "ok": true
+ },
+ "155": {
+  "cmd": "cat /sys/class/thermal/thermal_zone0/temp",
+  "ok": true
+ },
+ "157": {
+  "cmd": "dumpsys battery | grep -E 'AC powered|USB powered'",
+  "ok": true
+ },
+ "158": {
+  "cmd": "dumpsys battery | grep -E 'health|voltage|temperature'",
+  "ok": true
+ },
+ "163": {
+  "cmd": "mkdir -p /sdcard/deskbot_t && echo a > /sdcard/deskbot_t/a.txt && mv /sdcard/deskbot_t/a.txt /sdcard",
+  "ok": true
+ },
+ "164": {
+  "cmd": "echo hi > /sdcard/dt.txt && tar -czf /sdcard/dt.tgz -C /sdcard dt.txt && tar -tzf /sdcard/dt.tgz && ",
+  "ok": true
+ },
+ "165": {
+  "cmd": "df -h /data | tail -1",
+  "ok": true
+ },
+ "166": {
+  "cmd": "ls /storage",
+  "ok": true
+ },
+ "170": {
+  "cmd": "df -h /data | tail -1",
+  "ok": true
+ },
+ "171": {
+  "cmd": "ping -c 1 -W 3 1.1.1.1 | tail -2",
+  "ok": true
+ },
+ "172": {
+  "cmd": "ip neigh | head -3",
+  "ok": true
+ },
+ "175": {
+  "cmd": "iptables -S | head -3",
+  "ok": true
+ },
+ "181": {
+  "cmd": "uname -a; getprop ro.build.fingerprint",
+  "ok": true
+ },
+ "182": {
+  "cmd": "top -b -n 1 -m 3 | head -6",
+  "ok": true
+ },
+ "183": {
+  "cmd": "uptime; getprop sys.boot.reason",
+  "ok": true
+ },
+ "185": {
+  "cmd": "pm list features | head -3",
+  "ok": true
+ },
+ "187": {
+  "cmd": "date",
+  "ok": true
+ },
+ "189": {
+  "cmd": "getprop ro.product.model",
+  "ok": true
+ },
+ "190": {
+  "cmd": "settings list global | wc -l; pm list packages | wc -l",
+  "ok": true
+ },
+ "191": {
+  "cmd": "logcat -d -t 3",
+  "ok": true
+ },
+ "192": {
+  "cmd": "logcat -d -b crash -t 5; logcat -d -t 20 *:E | head -3",
+  "ok": true
+ },
+ "193": {
+  "cmd": "dmesg | tail -2",
+  "ok": true
+ },
+ "194": {
+  "cmd": "dumpsys -l | head -3",
+  "ok": true
+ },
+ "197": {
+  "cmd": "mkdir -p /sdcard/dt_crash && logcat -d -t 20 > /sdcard/dt_crash/log.txt && ls -l /sdcard/dt_crash/lo",
+  "ok": true
+ },
+ "198": {
+  "cmd": "dumpsys gfxinfo com.rishitgoklani.hermes_front_mobile | head -3",
+  "ok": true
+ },
+ "199": {
+  "cmd": "ls /sdcard | head -3",
+  "ok": true
+ },
+ "265": {
+  "cmd": "dumpsys wifi | grep -m2 -iE 'rssi|bssid'",
+  "ok": true
+ },
+ "269": {
+  "cmd": "appops get com.android.shell android:mock_location",
+  "ok": true
+ },
+ "271": {
+  "cmd": "su -v; ksud --version; ksud module list | head -3",
+  "ok": true
+ },
+ "272": {
+  "cmd": "ksud module list | head -2",
+  "ok": true
+ },
+ "274": {
+  "cmd": "ksud module list | wc -l",
+  "ok": true
+ },
+ "276": {
+  "cmd": "ksud profile get com.termux | head -3",
+  "ok": true
+ },
+ "277": {
+  "cmd": "getenforce",
+  "ok": true
+ },
+ "278": {
+  "cmd": "head -3 /system/build.prop",
+  "ok": true
+ },
+ "282": {
+  "cmd": "su u0_a343 -c 'export PATH=/data/data/com.termux/files/usr/bin; pkg list-installed 2>/dev/null | hea",
+  "ok": true
+ },
+ "283": {
+  "cmd": "ls /data/data/com.termux/files/usr/var/run/tmux-10343",
+  "ok": true
+ },
+ "291": {
+  "cmd": "curl -s -m 5 http://127.0.0.1:8642/health",
+  "ok": true
+ },
+ "293": {
+  "cmd": "grep -c 'total=' /data/data/com.termux/files/home/.hermes/logs/agent.log",
+  "ok": true
+ },
+ "294": {
+  "cmd": "su u0_a343 -c 'export PATH=/data/data/com.termux/files/usr/bin:$PATH HOME=/data/data/com.termux/file",
+  "ok": true
+ },
+ "309": {
+  "cmd": "tar -czf /sdcard/dt_mem.tgz -C /data/data/com.termux/files/home/.hermes memories && tar -tzf /sdcard",
+  "ok": true
+ },
+ "381": {
+  "cmd": "tar -czf /sdcard/dt_hermes.tgz -C /data/data/com.termux/files/home --exclude=.hermes/cache --exclude",
+  "ok": true
+ },
+ "382": {
+  "cmd": "settings list system | wc -l; settings list global | wc -l",
+  "ok": true
+ },
+ "383": {
+  "cmd": "tar -tzf /sdcard/dt_hermes.tgz | head -3; rm -f /sdcard/dt_hermes.tgz",
+  "ok": true
+ },
+ "388": {
+  "cmd": "OLD=$(settings get system haptic_feedback_enabled); settings put system haptic_feedback_enabled 0; N",
+  "ok": true
+ },
+ "394": {
+  "cmd": "settings get system ringtone",
+  "ok": true
+ },
+ "395": {
+  "cmd": "cmd overlay list | head -3",
+  "ok": true
+ },
+ "396": {
+  "cmd": "settings get secure sysui_qs_tiles",
+  "ok": true
+ },
+ "400": {
+  "cmd": "settings get secure icon_blacklist",
+  "ok": true
+ },
+ "403": {
+  "cmd": "pm path com.rishitgoklani.hermes_front_mobile && dumpsys package com.rishitgoklani.hermes_front_mobi",
+  "ok": true
+ }
+}
