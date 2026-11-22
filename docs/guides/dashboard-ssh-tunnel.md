@@ -103,12 +103,18 @@ Then `ssh -N deskbot` does the same thing. To keep the tunnel in the background,
 | The phone's IP changed | Wi-Fi gave it a new address. Look it up again, or reserve an address for the phone in your router. |
 
 ## After the phone restarts
-`sshd` and the dashboard do **not** start by themselves after a reboot, so the PC gets `Connection refused` on port 8022. In Termux run:
+`sshd` and the dashboard do **not** start by themselves after a reboot, so the PC gets `Connection refused` on port 8022. One command starts everything (wake lock, tmux session, `sshd`, the Hermes gateway, the dashboard and the watchdog), and it is safe to run again at any time because it skips what is already running:
 
 ```sh
-termux-wake-lock
-sshd
-tmux new-window -d -t hermes -n dashboard 'hermes dashboard --no-open'
+sh ~/bin/deskbot-up
 ```
 
-then run the `ssh -N -L ...` command on the PC again. To start them automatically at boot, install the Termux:Boot app, open it once, and use `scripts/termux/boot.sh` as `~/.termux/boot/10-deskbot.sh` (the one-click setup script places it). It always starts `sshd`; it starts the dashboard only if you create the flag file with `touch ~/.deskbot-dashboard`, because the dashboard uses a lot of memory.
+then run the `ssh -N -L ...` command on the PC again. Its log is `~/deskbot-boot.log`.
+
+To run it automatically at boot, install the **Termux:Boot** app (from F-Droid, same source as Termux), open it once so Android lets it run at boot, and copy the script into its folder:
+
+```sh
+mkdir -p ~/.termux/boot && cp ~/bin/deskbot-up ~/.termux/boot/10-deskbot.sh && chmod +x ~/.termux/boot/10-deskbot.sh
+```
+
+The one-click setup script (`scripts/setup_device.sh`) installs both copies for you; it still needs the Termux:Boot app to be installed by hand.
