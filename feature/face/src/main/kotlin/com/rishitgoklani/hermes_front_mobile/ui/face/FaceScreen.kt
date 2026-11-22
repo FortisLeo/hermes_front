@@ -29,12 +29,12 @@ import com.rishitgoklani.hermes_front_mobile.domain.face.FaceState
 @Composable
 fun FaceScreen(
     bot: BotState, face: FaceState, quickActions: List<QuickAction>, onAction: (QuickAction) -> Unit, onTap: () -> Unit,
-    modifier: Modifier = Modifier, backgroundColor: Color = Color(0xFF05070A),
+    modifier: Modifier = Modifier, backgroundColor: Color = Color(0xFF05070A), mouth: Float = 0f,
     overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
 ) {
     var panel by remember { mutableStateOf(false) }
     Box(modifier.fillMaxSize()) {
-        FaceView(bot, face, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
+        FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
         overlay()
         if (panel) {
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

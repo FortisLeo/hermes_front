@@ -29,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,6 +123,7 @@ class MainActivity : ComponentActivity() {
             Greetings.greeting(Calendar.getInstance().get(Calendar.HOUR_OF_DAY), away)?.let { container.speaker.enqueue(it) }
         }
 
+        val mouth by container.mouth.openness.collectAsState()
         val liveScreen = screens[UiSurface.Full] ?: screens[UiSurface.Overlay] ?: screens[UiSurface.Desk]
         BackHandler(enabled = section != null) { section = null }
 
@@ -137,7 +139,7 @@ class MainActivity : ComponentActivity() {
             },
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
-                FaceScreen(bot, face, actions, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
+                FaceScreen(bot, face, actions, mouth = mouth, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     overlay = {
                         if (liveScreen == null) FaceClock(statusLine, Modifier.align(Alignment.BottomCenter))
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {

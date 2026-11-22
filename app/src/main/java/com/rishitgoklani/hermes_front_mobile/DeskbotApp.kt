@@ -77,6 +77,7 @@ class AppContainer(private val app: Application) {
     val hermes: HermesGateway = HermesClient({ current }, { "Current local date and time on the user's phone: " + com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.LocalTime.describe(java.time.ZonedDateTime.now()) })
     private val tts = AndroidSpeechSynthesizer(app)
     val speaker: SpeechSynthesizer get() = tts
+    val mouth: com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource get() = tts
     val audit = FileAuditLog(File(app.filesDir, "audit.log"))
 
     // Face, personas, quick actions

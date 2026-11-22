@@ -42,8 +42,10 @@ private val Bg = Color(0xFF05070A)
 @Composable
 fun FaceView(
     bot: BotState, face: FaceState = FaceState(), modifier: Modifier = Modifier,
-    onTap: () -> Unit = {}, onLongPress: () -> Unit = {}, backgroundColor: Color = Bg,
+    onTap: () -> Unit = {}, onLongPress: () -> Unit = {}, backgroundColor: Color = Bg, mouth: Float = 0f,
 ) {
+    val mouthAnim = remember { Animatable(0f) }
+    LaunchedEffect(mouth, bot) { mouthAnim.animateTo(if (bot == BotState.Speaking) mouth else 0f, tween(90)) }
     val style = EyeStyles.compute(bot, face)
     val open = remember { Animatable(style.openness) }
     val lookX = remember { Animatable(style.lookX) }
@@ -95,6 +97,10 @@ fun FaceView(
                     drawLid(style.lidSlant, side, cx, cy, eyeW, h, backgroundColor)
                 }
             }
+        }
+        if (mouthAnim.value > 0.02f) {
+            val mw = eyeW * 0.5f; val mh = eyeW * 0.32f * mouthAnim.value
+            drawRoundRect(color, Offset(size.width / 2 + mx - mw / 2, cy + eyeH * 0.75f), Size(mw, mh.coerceAtLeast(4f)), CornerRadius(mw * 0.4f))
         }
         drawEffects(style.effects, measurer, ang, eyeW, size.width / 2 + mx, cy, gap)
     }
