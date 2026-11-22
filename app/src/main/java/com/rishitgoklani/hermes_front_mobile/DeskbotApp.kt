@@ -170,6 +170,7 @@ class AppContainer(private val app: Application) {
     }
 
     private val placeTracker = com.rishitgoklani.hermes_front_mobile.domain.sense.PlaceTracker()
+    private val greeter = com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) })
     private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     init {
         avatar.setEnabled(prefs.getBoolean("avatar_mode", false))
@@ -185,6 +186,7 @@ class AppContainer(private val app: Application) {
                 locationOnce(app)?.let { (lat, lon) -> placeTracker.update(lat, lon, ps).forEach { engine.onEvent(it) } } }
         }
         engine.observe { e ->
+            if (!kill.isActive()) greeter.onEvent(e)?.let { g -> face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Giggle); tts.enqueue(g) }
             val sig = when (e) {
                 is DeviceEvent.FaceSeen -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Face
                 is DeviceEvent.Sound -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Sound

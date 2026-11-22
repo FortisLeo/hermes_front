@@ -59,7 +59,7 @@ PARTIAL = {
  214: "calendar + web + notification digest recipe", 
  223: "timers + routines + place events (see 264)", 226: "cron recipe", 227: "cron recipe", 228: "timer + DND via shell",
  264: "place_add/list/remove verified on device; PlaceTracker enter/exit unit-tested; polling not field-tested", 
- 322: "state faces built; BatteryLow event -> worried face wired (not field-tested)", 325: "skill (greeting rules); arrival needs presence loop", 326: "expr tags; tone detection by model",
+ 322: "state faces built; BatteryLow event -> worried face wired (not field-tested)", 325: "ArrivalGreeter (time-of-day + time away) speaks on presence arrival; unit-tested, wired; no live arrival yet", 326: "expr tags; tone detection by model",
  331: "ArrivalFusion (face+sound+motion+visual -> presence arrived/departed event, routine trigger kind=arrived|departed) unit-tested and wired; builds and runs on device, no live arrival produced", 332: "routine + cron recipes", 333: "DND/call checks via shell", 334: "presence_check turns the eyes toward a detected face (GazeMapper unit-tested; no live face available to confirm); sound direction impossible with one mic",
  335: "barge-in stops turn; resume logic is a skill", 336: "recipe uses vibrate/volume/tts", 337: "ambient_mode + sensors", 338: "audit-log mining recipe",
  394: "recipe",  
