@@ -14,7 +14,7 @@ class OsaHttpCatalogTest {
     private lateinit var server: MockWebServer
     @Before fun up() { server = MockWebServer().also { it.start() } }
     @After fun down() = server.shutdown()
-    private fun catalog(guard: (String) -> String? = { null }) = OsaHttpCatalog(projectsUrl = server.url("/projects.json").toString(), fileUrl = { server.url("/" + it.file).toString() }, guard = guard)
+    private fun catalog(guard: (String) -> String? = { null }) = OsaHttpCatalog(retryDelayMs = 1, projectsUrl = server.url("/projects.json").toString(), fileUrl = { server.url("/" + it.file).toString() }, guard = guard)
 
     @Test fun loadsCollectionsThenAvatarsAndCachesBoth() = runBlocking {
         server.enqueue(MockResponse().setBody("""[{"id":"a","name":"A","license":"CC0","avatar_data_file":"a.json"}]"""))
@@ -33,5 +33,16 @@ class OsaHttpCatalogTest {
     @Test fun thumbnailIsNullOnFailure() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(500)); assertNull(catalog().thumbnail(server.url("/t").toString()))
         server.enqueue(MockResponse().setBody("img")); assertEquals(3, catalog().thumbnail(server.url("/t").toString())!!.size)
+    }
+    @Test fun retriesAfter429ThenSucceeds() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(429)); server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "0")); server.enqueue(MockResponse().setBody("ok"))
+        assertEquals("ok", String(catalog().download(server.url("/m").toString()))); assertEquals(3, server.requestCount)
+    }
+    @Test fun givesUpWithFriendlyMessageWhenAlways429() = runBlocking {
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(429)) }
+        val e = runCatching { catalog().download(server.url("/m").toString()) }.exceptionOrNull(); assertTrue(e!!.message!!.contains("busy"))
+    }
+    @Test fun nonArweaveUrlsGetNoMirror() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(500)); assertTrue(runCatching { catalog().download(server.url("/m").toString()) }.isFailure); assertEquals(1, server.requestCount)
     }
 }

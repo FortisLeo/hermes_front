@@ -80,7 +80,7 @@ class AvatarLibraryViewModel(private val source: AvatarCatalogSource, private va
         if (url.isEmpty()) return null
         synchronized(thumbs) { if (thumbs.containsKey(url)) return thumbs[url] }
         val b = source.thumbnail(url)
-        synchronized(thumbs) { thumbs[url] = b }
+        if (b != null) synchronized(thumbs) { thumbs[url] = b }
         return b
     }
 
