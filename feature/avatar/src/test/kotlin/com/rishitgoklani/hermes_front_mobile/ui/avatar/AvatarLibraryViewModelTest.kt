@@ -63,6 +63,9 @@ class AvatarLibraryViewModelTest {
         val got = mutableListOf<Int>(); val v = vm(Src(model("CC_BY_NC")), got); v.load(); advanceUntilIdle()
         v.install(v.state.value.avatars[0]); advanceUntilIdle(); assertTrue(got.isEmpty()); assertTrue(v.state.value.message!!.startsWith("Model rejected"))
     }
+    @Test fun uploadedFilesSkipTheLicenseRule() = runTest {
+        val got = mutableListOf<Int>(); val v = vm(Src(model("CC0")), got); v.importFile("mine.vrm", model("CC_BY_NC")); advanceUntilIdle(); assertEquals(1, got.size)
+    }
     @Test fun importFileHandlesUnreadableAndGoodFiles() = runTest {
         val got = mutableListOf<Int>(); val v = vm(Src(model("CC0")), got)
         v.importFile("x.vrm", null); assertEquals("Could not read x.vrm", v.state.value.message)

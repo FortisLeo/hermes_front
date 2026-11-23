@@ -72,7 +72,7 @@ class AvatarLibraryViewModel(private val source: AvatarCatalogSource, private va
     fun importFile(name: String, bytes: ByteArray?) {
         if (bytes == null) { _state.update { it.copy(message = "Could not read $name") }; return }
         if (bytes.size > VrmLicense.MAX_BYTES) { _state.update { it.copy(message = "Model rejected: larger than 50 MB") }; return }
-        viewModelScope.launch { val msg = report(name, installer.install(bytes)); _state.update { it.copy(message = msg) } }
+        viewModelScope.launch { val msg = report(name, installer.install(bytes, enforceLicense = false)); _state.update { it.copy(message = msg) } }
     }
 
     /** Preview image bytes for a catalog entry, cached in memory. */
