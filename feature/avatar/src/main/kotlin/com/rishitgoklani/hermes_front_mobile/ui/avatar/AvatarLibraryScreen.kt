@@ -55,6 +55,7 @@ fun AvatarLibraryScreen(
     avatarOn: Boolean,
     onToggleAvatar: () -> Unit,
     onUpload: () -> Unit,
+    modelNote: String? = null,
     onLoad: () -> Unit,
     onSelect: (com.rishitgoklani.hermes_front_mobile.domain.avatar.CatalogCollection) -> Unit,
     onQuery: (String) -> Unit,
@@ -71,6 +72,7 @@ fun AvatarLibraryScreen(
         state.message?.let { Text(it, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodyMedium) }
         if (tab == 0) {
             Box(Modifier.weight(1f).fillMaxWidth()) { preview() }
+            modelNote?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onUpload, Modifier.weight(1f)) { Text("Upload .vrm") }
                 OutlinedButton(onClick = onToggleAvatar, Modifier.weight(1f)) { Text(if (avatarOn) "Use eyes face" else "Use avatar") }

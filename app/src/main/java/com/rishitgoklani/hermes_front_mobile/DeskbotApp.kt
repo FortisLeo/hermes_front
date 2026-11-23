@@ -87,6 +87,8 @@ class AppContainer(private val app: Application) {
     val avatarModelVersion = kotlinx.coroutines.flow.MutableStateFlow(File(File(app.filesDir, "avatar"), "model.vrm").lastModified())
     /** Longest texture side the viewer may decode for the current model (chosen per model by TextureBudget). */
     val avatarTextureCap = kotlinx.coroutines.flow.MutableStateFlow(app.getSharedPreferences("deskbot", android.content.Context.MODE_PRIVATE).getInt("avatar_tex_cap", 1024))
+    /** What the Avatar screen tells the user about the current model (textures shrunk, or a rollback). */
+    val avatarNote = kotlinx.coroutines.flow.MutableStateFlow(app.getSharedPreferences("deskbot", android.content.Context.MODE_PRIVATE).getString("avatar_note", null))
     val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog(cacheDir = File(app.cacheDir, "avatar-thumbs"))
     /** The one way a model becomes the avatar (license-checked by the installer): write atomically, turn the avatar on, reload the viewer. */
     val avatarInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller { bytes ->
@@ -95,8 +97,8 @@ class AppContainer(private val app: Application) {
             val cur = File(avatarDir, "model.vrm"); val prev = File(avatarDir, "model.prev.vrm")
             if (cur.isFile) { prev.delete(); cur.renameTo(prev) }
             check(tmp.renameTo(cur)) { "could not save model" }
-            val cap = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.textureCap(bytes)
-            prefs.edit().putBoolean("avatar_model_pending", true).putInt("avatar_tex_cap", cap).commit(); avatarTextureCap.value = cap   // cleared once the viewer has rendered it for a while
+            val plan = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.plan(bytes); val cap = plan.cap
+            prefs.edit().putBoolean("avatar_model_pending", true).putInt("avatar_tex_cap", cap).putString("avatar_note", plan.note()).commit(); avatarTextureCap.value = cap; avatarNote.value = plan.note()   // cleared once the viewer has rendered it for a while
         }
         avatar.setNodes(emptyList()); avatarModelVersion.value = System.currentTimeMillis(); avatar.setEnabled(true)
     }
@@ -195,8 +197,8 @@ class AppContainer(private val app: Application) {
     init {
         // A freshly installed model that killed the app before it could prove itself is rolled back, so it cannot crash-loop the app.
         when (com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.onStart(prefs.getBoolean("avatar_model_pending", false), File(avatarDir, "model.prev.vrm").isFile)) {
-            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.RestorePrevious -> { File(avatarDir, "model.vrm").delete(); File(avatarDir, "model.prev.vrm").renameTo(File(avatarDir, "model.vrm")); avatarModelVersion.value = System.currentTimeMillis(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; restored the previous one") }
-            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.Remove -> { File(avatarDir, "model.vrm").delete(); prefs.edit().putBoolean("avatar_mode", false).apply(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; removed it") }
+            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.RestorePrevious -> { File(avatarDir, "model.vrm").delete(); File(avatarDir, "model.prev.vrm").renameTo(File(avatarDir, "model.vrm")); avatarModelVersion.value = System.currentTimeMillis(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; restored the previous one"); prefs.edit().putString("avatar_note", "The last model you added crashed the app, so the previous one was restored.").apply(); avatarNote.value = "The last model you added crashed the app, so the previous one was restored." }
+            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.Remove -> { File(avatarDir, "model.vrm").delete(); prefs.edit().putBoolean("avatar_mode", false).apply(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; removed it"); prefs.edit().putString("avatar_note", "The last model you added crashed the app and was removed.").apply(); avatarNote.value = "The last model you added crashed the app and was removed." }
             else -> {}
         }
         prefs.edit().remove("avatar_model_pending").apply()

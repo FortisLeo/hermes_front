@@ -21,3 +21,10 @@ test('createImageBitmap is called with a resize for big images only', async () =
   assert.equal(calls[0].resizeWidth, 1024); assert.equal(calls[0].premultiplyAlpha, 'none'); assert.equal(calls[1].resizeWidth, undefined); assert.equal(calls[2], undefined);
   undo(); assert.equal(target.createImageBitmap.length, 2);
 });
+test('at most `parallel` decodes run at the same time', async () => {
+  let running = 0, peak = 0;
+  const target = { createImageBitmap: async () => { running++; peak = Math.max(peak, running); await new Promise(r => setTimeout(r, 5)); running--; return 'b'; } };
+  installTextureLimit(1024, target, () => {}, 2);
+  await Promise.all(Array.from({ length: 8 }, () => target.createImageBitmap(new Blob([png(512, 512)]))));
+  assert.equal(peak, 2);
+});

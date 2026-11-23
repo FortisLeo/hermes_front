@@ -14,8 +14,9 @@ object AvatarModelGuard {
     fun problem(bytes: ByteArray): String? =
         if (bytes.size > MAX_FILE_BYTES) "model is ${"%.1f".format(bytes.size / 1048576.0)} MB; the limit is ${MAX_FILE_BYTES / 1048576} MB" else budget.problem(bytes)
 
+    fun plan(bytes: ByteArray): TexturePlan = budget.plan(bytes)
     /** Texture size cap the viewer should apply to this model. */
-    fun textureCap(bytes: ByteArray): Int = budget.plan(bytes).cap
+    fun textureCap(bytes: ByteArray): Int = plan(bytes).cap
 
     /** [pending] = a newly installed model never got far enough to prove it renders (the app died first). */
     fun onStart(pending: Boolean, hasPrevious: Boolean): Action = when {

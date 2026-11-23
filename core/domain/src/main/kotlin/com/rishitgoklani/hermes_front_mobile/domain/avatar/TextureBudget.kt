@@ -69,11 +69,14 @@ object TextureMemory {
 }
 
 /** Picks the largest cap from [caps] (descending) whose estimated texture memory fits [budgetBytes]; falls back to the smallest. */
-class MemoryBudgetPolicy(private val budgetBytes: Long = 96L * 1024 * 1024, private val caps: List<Int> = listOf(2048, 1024, 512, 256)) : TexturePolicy {
+class MemoryBudgetPolicy(private val budgetBytes: Long = 48L * 1024 * 1024, private val caps: List<Int> = listOf(2048, 1024, 512, 256)) : TexturePolicy {
     override fun cap(images: List<ImageDim>) = caps.firstOrNull { TextureMemory.estimate(images, it) <= budgetBytes } ?: caps.last()
 }
 
-data class TexturePlan(val cap: Int, val images: Int, val estimatedBytes: Long, val originalBytes: Long)
+data class TexturePlan(val cap: Int, val images: Int, val estimatedBytes: Long, val originalBytes: Long) {
+    /** One line for the user, or null when nothing was shrunk. */
+    fun note(): String? = if (estimatedBytes < originalBytes) "Textures shrunk to $cap px: about ${(originalBytes - estimatedBytes) / 1048576} MB less memory than the original." else null
+}
 
 /** Plans texture sizes for a model and refuses models that cannot fit even at the smallest size. */
 class TextureBudget(private val policy: TexturePolicy = MemoryBudgetPolicy(), private val hardLimitBytes: Long = 160L * 1024 * 1024, private val floorCap: Int = 256) {

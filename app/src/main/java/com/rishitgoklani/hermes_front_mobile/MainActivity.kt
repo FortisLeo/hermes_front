@@ -149,7 +149,7 @@ class MainActivity : ComponentActivity() {
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val modelVersion by container.avatarModelVersion.collectAsStateWithLifecycle(); val texCap by container.avatarTextureCap.collectAsStateWithLifecycle()
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && section != Section.Avatar && java.io.File(container.avatarDir, "model.vrm").isFile) ({ val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
                     Box(Modifier.fillMaxSize()) {
                         androidx.compose.runtime.key(modelVersion) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, textureCap = texCap, onNodes = container.avatar::setNodes, onHead = { x, y, h -> head.value = Triple(x, y, h) }) }
                         com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects, head.value.first, head.value.second, head.value.third)
@@ -178,10 +178,10 @@ class MainActivity : ComponentActivity() {
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
                                         DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode) }
-                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); val ver by container.avatarModelVersion.collectAsStateWithLifecycle(); val texCap2 by container.avatarTextureCap.collectAsStateWithLifecycle(); val lib by library.state.collectAsStateWithLifecycle()
+                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); val ver by container.avatarModelVersion.collectAsStateWithLifecycle(); val texCap2 by container.avatarTextureCap.collectAsStateWithLifecycle(); val note by container.avatarNote.collectAsStateWithLifecycle(); val lib by library.state.collectAsStateWithLifecycle()
                                         LaunchedEffect(lib.message) { if (lib.message != null) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
                                         com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, preview = { androidx.compose.runtime.key(ver) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, textureCap = texCap2, onNodes = container.avatar::setNodes) } },
-                                            avatarOn = av.enabled, onToggleAvatar = { container.avatar.setEnabled(!av.enabled) }, onUpload = { pickVrm.launch(arrayOf("*/*")) }, onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail) }
+                                            avatarOn = av.enabled, onToggleAvatar = { container.avatar.setEnabled(!av.enabled) }, onUpload = { pickVrm.launch(arrayOf("*/*")) }, modelNote = note, onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail) }
                                     Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save) }
                                 }
                             }

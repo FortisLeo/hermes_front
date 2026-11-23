@@ -45,4 +45,8 @@ class TextureBudgetTest {
     @Test fun refusesOnlyModelsThatCannotFitEvenWhenTiny() {
         assertNull(TextureBudget().problem(TestGlb.build(List(20) { TestGlb.png(8192, 8192) }))); assertNotNull(TextureBudget().problem(TestGlb.build(List(1500) { TestGlb.png(512, 512) })))
     }
+    @Test fun noteOnlyWhenTexturesWereShrunk() {
+        val big = TextureBudget().plan(TestGlb.build(List(6) { TestGlb.png(4096, 4096) })); assertTrue(big.note()!!.startsWith("Textures shrunk to 1024 px"))
+        assertNull(TextureBudget().plan(TestGlb.build(listOf(TestGlb.png(512, 512)))).note()); assertNull(TextureBudget().plan(TestGlb.build(emptyList())).note())
+    }
 }
