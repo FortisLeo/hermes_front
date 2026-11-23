@@ -122,6 +122,8 @@ Patterns in use: ports and adapters, strategy and decorator (deny-list and audit
 python3 scripts/verify_recipes.py                   # runs read-only skill recipes on the phone (needs the app's bridge up)
 python3 scripts/verify_hermes.py                    # real Hermes agent tasks end to end (15 of 16 pass)
 python3 scripts/gen_feature_status.py && python3 scripts/gen_docs.py   # regenerate the status and feature docs
+node --test feature/avatar/src/test/js/texture-budget.test.mjs         # avatar viewer texture-limit tests
+sh scripts/avatar_stress.sh "/sdcard/Download/Big.vrm" 3                 # import a model N times, check the app survives (needs the phone)
 ```
 `FeatureCoverageTest` enforces that every catalog number has exactly one skill section and that every tool a skill names exists.
 
