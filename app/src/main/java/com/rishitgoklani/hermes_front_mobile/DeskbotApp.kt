@@ -1,5 +1,6 @@
 package com.rishitgoklani.hermes_front_mobile
 
+import kotlinx.coroutines.flow.collectLatest
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -87,7 +88,13 @@ class AppContainer(private val app: Application) {
     val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog(cacheDir = File(app.cacheDir, "avatar-thumbs"))
     /** The one way a model becomes the avatar (license-checked by the installer): write atomically, turn the avatar on, reload the viewer. */
     val avatarInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller { bytes ->
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { avatarDir.mkdirs(); val tmp = File(avatarDir, "model.vrm.tmp"); tmp.writeBytes(bytes); check(tmp.renameTo(File(avatarDir, "model.vrm"))) { "could not save model" } }
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            avatarDir.mkdirs(); val tmp = File(avatarDir, "model.vrm.tmp"); tmp.writeBytes(bytes)
+            val cur = File(avatarDir, "model.vrm"); val prev = File(avatarDir, "model.prev.vrm")
+            if (cur.isFile) { prev.delete(); cur.renameTo(prev) }
+            check(tmp.renameTo(cur)) { "could not save model" }
+            prefs.edit().putBoolean("avatar_model_pending", true).commit()   // cleared once the viewer has rendered it for a while
+        }
         avatar.setNodes(emptyList()); avatarModelVersion.value = System.currentTimeMillis(); avatar.setEnabled(true)
     }
     val audit = FileAuditLog(File(app.filesDir, "audit.log"))
@@ -183,11 +190,20 @@ class AppContainer(private val app: Application) {
     private val greeter = com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) })
     private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     init {
+        // A freshly installed model that killed the app before it could prove itself is rolled back, so it cannot crash-loop the app.
+        when (com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.onStart(prefs.getBoolean("avatar_model_pending", false), File(avatarDir, "model.prev.vrm").isFile)) {
+            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.RestorePrevious -> { File(avatarDir, "model.vrm").delete(); File(avatarDir, "model.prev.vrm").renameTo(File(avatarDir, "model.vrm")); avatarModelVersion.value = System.currentTimeMillis(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; restored the previous one") }
+            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.Remove -> { File(avatarDir, "model.vrm").delete(); prefs.edit().putBoolean("avatar_mode", false).apply(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; removed it") }
+            else -> {}
+        }
+        prefs.edit().remove("avatar_model_pending").apply()
         // Avatar safety: if the process died twice in a row while the 3D avatar was on (the phone is memory-starved), fall back to the eyes face.
         val d = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarSafety.onStart(prefs.getBoolean("avatar_mode", false), prefs.getInt("avatar_unclean", 0))
         prefs.edit().putBoolean("avatar_mode", d.avatarOn).putInt("avatar_unclean", d.uncleanCount).apply()
         avatar.setEnabled(prefs.getBoolean("avatar_mode", false))
         scope.launch { kotlinx.coroutines.delay(60_000); prefs.edit().putInt("avatar_unclean", 0).apply() }
+        // The model has proved itself once the viewer reported its bones and the app then survived 20 s: only then is it safe to forget the rollback copy's purpose.
+        scope.launch { avatar.nodes.collectLatest { if (it.isNotEmpty()) { kotlinx.coroutines.delay(20_000); prefs.edit().remove("avatar_model_pending").apply() } } }
         scope.launch { avatar.state.collect { prefs.edit().putBoolean("avatar_mode", it.enabled).apply() } }
         scope.launch { face.state.collect { avatar.setMood(it.mood); avatar.look(it.lookX, it.lookY) } }
         scope.launch { tts.openness.collect { avatar.setMouth(it) } }

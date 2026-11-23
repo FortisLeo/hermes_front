@@ -69,7 +69,7 @@ sealed interface InstallResult {
 /** One place that decides whether model bytes become the avatar: license-checks first, installs only accepted models. Used by upload, catalog and the agent tools. */
 class AvatarInstaller(private val store: suspend (ByteArray) -> Unit) {
     /** [enforceLicense] is true for downloads; the user's own uploaded files skip the license rule but must still be valid VRMs. */
-    suspend fun install(bytes: ByteArray, enforceLicense: Boolean = true): InstallResult = when (val c = VrmLicense.check(bytes, enforceLicense)) {
+    suspend fun install(bytes: ByteArray, enforceLicense: Boolean = true): InstallResult = AvatarModelGuard.sizeProblem(bytes.size)?.let { InstallResult.Rejected(it) } ?: when (val c = VrmLicense.check(bytes, enforceLicense)) {
         is VrmCheck.Rejected -> InstallResult.Rejected(c.reason)
         is VrmCheck.Ok -> { store(bytes); InstallResult.Installed(c.info) }
     }
