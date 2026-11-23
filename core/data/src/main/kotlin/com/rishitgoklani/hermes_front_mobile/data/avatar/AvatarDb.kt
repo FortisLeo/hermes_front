@@ -42,3 +42,8 @@ internal fun AvatarRow.toEntry() = AvatarEntry(
     runCatching { AvatarStatus.valueOf(status) }.getOrDefault(AvatarStatus.BROKEN),
 )
 internal fun AvatarEntry.toRow() = AvatarRow(id, name, source.name, license, author, originalBytes, storedBytes, textureCap, estTexBytes, note, thumbPath, addedAt, lastUsedAt, status.name)
+
+object DeskbotDatabases {
+    /** The app database (file `deskbot.db`). One instance per process. */
+    fun create(context: android.content.Context): DeskbotDatabase = androidx.room.Room.databaseBuilder(context.applicationContext, DeskbotDatabase::class.java, "deskbot.db").build()
+}

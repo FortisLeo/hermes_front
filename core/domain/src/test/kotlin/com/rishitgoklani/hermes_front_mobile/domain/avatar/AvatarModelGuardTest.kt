@@ -15,11 +15,6 @@ class AvatarModelGuardTest {
     @Test fun modelsWithBigTexturesAreAcceptedBecauseTheViewerShrinksThem() {
         val glb = TestGlb.build(List(6) { TestGlb.png(4096, 4096) }); assertNull(AvatarModelGuard.problem(glb)); assertEquals(1024, AvatarModelGuard.textureCap(glb))
     }
-    @Test fun rollbackOnlyWhenTheNewModelNeverProvedItself() {
-        assertEquals(AvatarModelGuard.Action.None, AvatarModelGuard.onStart(false, true))
-        assertEquals(AvatarModelGuard.Action.RestorePrevious, AvatarModelGuard.onStart(true, true))
-        assertEquals(AvatarModelGuard.Action.Remove, AvatarModelGuard.onStart(true, false))
-    }
     @Test fun installerRefusesOversizedModelsBeforeInstalling() = runBlocking {
         var n = 0
         assertTrue(AvatarInstaller { n++ }.install(big(), enforceLicense = false) is InstallResult.Rejected); assertEquals(0, n)

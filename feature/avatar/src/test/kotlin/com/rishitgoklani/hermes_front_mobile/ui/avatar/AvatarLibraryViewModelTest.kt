@@ -4,6 +4,13 @@ import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarCatalogSource
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.CatalogAvatar
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.CatalogCollection
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.RemoveAvatar
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.SelectAvatar
+import com.rishitgoklani.hermes_front_mobile.testing.FakeActiveSlotStore
+import com.rishitgoklani.hermes_front_mobile.testing.FakeAvatarFiles
+import com.rishitgoklani.hermes_front_mobile.testing.FakeAvatarLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -38,7 +45,7 @@ class AvatarLibraryViewModelTest {
         override suspend fun download(url: String) = bytes
         override suspend fun thumbnail(url: String): ByteArray? { thumbCalls++; return byteArrayOf(1) }
     }
-    private fun vm(src: Src, installed: MutableList<Int> = mutableListOf()) = AvatarLibraryViewModel(src, AvatarInstaller { installed += it.size })
+    private fun vm(src: Src, installed: MutableList<Int> = mutableListOf()): AvatarLibraryViewModel { val lib = FakeAvatarLibrary(); val act = FakeActiveSlotStore(); return AvatarLibraryViewModel(src, AvatarInstaller { installed += it.size }, lib, act, SelectAvatar(lib, act) { 1L }, RemoveAvatar(lib, FakeAvatarFiles(), act)) }
 
     @Test fun loadsCollectionsAndFirstCollectionAvatars() = runTest {
         val v = vm(Src(model("CC0"))); v.load(); advanceUntilIdle()
@@ -74,5 +81,17 @@ class AvatarLibraryViewModelTest {
     }
     @Test fun thumbnailsAreCached() = runTest {
         val src = Src(model("CC0")); val v = vm(src); v.thumbnail("https://x/t"); v.thumbnail("https://x/t"); assertEquals(1, src.thumbCalls); assertNull(v.thumbnail(""))
+    }
+
+    @Test fun libraryListAndUseRetryRemoveAndRename() = runTest {
+        val lib = FakeAvatarLibrary(listOf(
+            com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarEntry("a", "A", AvatarSource.UPLOAD, "CC0", "x", 10, 5, 512, 1, null, null, 1, 1, com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarStatus.BROKEN)))
+        val act = FakeActiveSlotStore(); val files = FakeAvatarFiles()
+        val v = AvatarLibraryViewModel(Src(model("CC0")), AvatarInstaller { }, lib, act, SelectAvatar(lib, act) { 1L }, RemoveAvatar(lib, files, act)); advanceUntilIdle()
+        assertEquals(listOf("a"), v.state.value.installed.map { it.id })
+        v.use(AvatarSlot.Model("a")); advanceUntilIdle(); assertEquals(AvatarSlot.Eyes, v.state.value.activeSlot)          // broken: refused
+        v.retry("a"); advanceUntilIdle(); assertEquals(AvatarSlot.Model("a"), v.state.value.activeSlot)
+        v.rename("a", "Fern"); advanceUntilIdle(); assertEquals("Fern", v.state.value.installed[0].name)
+        v.removeAvatar("a"); advanceUntilIdle(); assertTrue(v.state.value.installed.isEmpty()); assertEquals(AvatarSlot.Eyes, v.state.value.activeSlot)
     }
 }

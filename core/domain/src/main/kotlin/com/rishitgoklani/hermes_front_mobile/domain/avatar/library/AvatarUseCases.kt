@@ -24,7 +24,7 @@ class ImportAvatar(
         val info = when (val c = VrmLicense.check(req.bytes, req.enforceLicense)) { is VrmCheck.Rejected -> return ImportResult.Rejected(c.reason); is VrmCheck.Ok -> c.info }
         val plan = budget.plan(req.bytes)
         onProgress(ImportProgress("Optimizing"))
-        val opt = optimizer.optimize(req.bytes, plan.cap) { d, t -> onProgress(ImportProgress("Optimizing textures", d, t)) }
+        val opt = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { optimizer.optimize(req.bytes, plan.cap) { d, t -> onProgress(ImportProgress("Optimizing textures", d, t)) } }
         val after = budget.plan(opt.bytes)
         val id = newId()
         onProgress(ImportProgress("Saving"))
@@ -40,14 +40,16 @@ class ImportAvatar(
 /** The viewer rendered the model and the app survived: it is safe. */
 class MarkProven(private val library: AvatarLibrary) { suspend operator fun invoke(id: String) { if (library.get(id)?.status == AvatarStatus.PENDING) library.setStatus(id, AvatarStatus.OK) } }
 
-/** At startup: a model still PENDING means the app died before it proved itself. Mark it BROKEN and leave the slot on Eyes if it was showing. */
+/**
+ * At startup: the app died while a model was still PENDING. Only the model that was on screen is blamed (BROKEN, and the slot goes back to Eyes);
+ * other pending models were never shown, so they stay PENDING and get their chance when shown.
+ */
 class ReconcilePending(private val library: AvatarLibrary, private val active: ActiveSlotStore) {
     suspend operator fun invoke(): List<AvatarEntry> {
-        val bad = library.all().filter { it.status == AvatarStatus.PENDING }
-        bad.forEach { library.setStatus(it.id, AvatarStatus.BROKEN) }
-        val slot = active.current()
-        if (slot is AvatarSlot.Model && bad.any { it.id == slot.id }) active.set(AvatarSlot.Eyes)
-        return bad
+        val slot = active.current() as? AvatarSlot.Model ?: return emptyList()
+        val bad = library.get(slot.id)?.takeIf { it.status == AvatarStatus.PENDING } ?: return emptyList()
+        library.setStatus(bad.id, AvatarStatus.BROKEN); active.set(AvatarSlot.Eyes)
+        return listOf(bad)
     }
 }
 

@@ -35,9 +35,9 @@ Everything below was captured from the real phone.
 | --- | --- | --- |
 | ![](docs/screenshots/avatar-agent-pose.png) | ![](docs/screenshots/avatar-agent-animation.png) | ![](docs/screenshots/avatar-vrma-clip.png) |
 
-| Avatar catalog (OpenSourceAvatars) | Upload a .vrm from the phone |
+| Avatar catalog (OpenSourceAvatars) | Avatar library: installed, optimized, removable |
 |---|---|
-| ![](docs/screenshots/avatar-catalog.png) | ![](docs/screenshots/avatar-upload.png) |
+| ![](docs/screenshots/avatar-catalog.png) | ![](docs/screenshots/avatar-library.png) |
 
 | Hidden menu (swipe in from the left) | Voice screen |
 |---|---|
@@ -57,7 +57,7 @@ The complete list, with the status of every one of the 384 catalogued features a
 - Presence: counts faces (no identity, frame discarded), eyes follow a detected face, arrival/departure fusion of camera, sound, motion and visual change, spoken greeting on arrival.
 
 **3D VRM avatar**
-- **Avatar screen** (hidden menu): *Upload .vrm* opens the file picker, and the *Catalog* tab browses the free [OpenSourceAvatars](https://www.opensourceavatars.com) registry (collections, search, previews); tap a model to download and use it. The agent can do the same with `avatar_catalog` and `avatar_download`.
+- **Avatar library + swipe**: the *Avatars* screen lists every installed avatar (thumbnail, optimized size, Use / Retry / Remove) and *Upload .vrm* adds one. **Swipe right-to-left on the face** to step through the eyes and your avatars; only the active avatar and the next one are kept in memory (the next is staged in the same WebView, so a swap takes about 40-90 ms), and imported models are optimized (big textures re-encoded smaller) and stored in Room. The *Catalog* tab browses the free [OpenSourceAvatars](https://www.opensourceavatars.com) registry (collections, search, previews); tap a model to download and use it. The agent can do the same with `avatar_catalog` and `avatar_download`.
 - Big models work: textures are shrunk while loading (the app picks 2048/1024/512/256 px from the model's estimated GPU memory), so a 20 MB VRM with 4K textures renders on a 3.5 GB phone. Models over 50 MB or with absurdly many textures are refused, and a model that still kills the app is rolled back automatically.
 - Catalog downloads are licence-checked (CC0, CC-BY, CC-BY-SA, VRM "everyone"; others are refused). Your own uploaded files skip the licence rule but must still be valid VRM files. The model is shown as the face, and the agent can move **any bone or node** (`avatar_bones`, `avatar_pose`, `avatar_animate`); there are no preset motions. Imports and plays `.vrma` clips. Emotion effects, tap reactions, lip sync and gaze work on it too.
 
@@ -122,7 +122,7 @@ Patterns in use: ports and adapters, strategy and decorator (deny-list and audit
 python3 scripts/verify_recipes.py                   # runs read-only skill recipes on the phone (needs the app's bridge up)
 python3 scripts/verify_hermes.py                    # real Hermes agent tasks end to end (15 of 16 pass)
 python3 scripts/gen_feature_status.py && python3 scripts/gen_docs.py   # regenerate the status and feature docs
-node --test feature/avatar/src/test/js/texture-budget.test.mjs         # avatar viewer texture-limit tests
+node --test feature/avatar/src/test/js/*.test.mjs                        # avatar viewer tests (texture limit, model slots)
 sh scripts/avatar_stress.sh "/sdcard/Download/Big.vrm" 3                 # import a model N times, check the app survives (needs the phone)
 ```
 `FeatureCoverageTest` enforces that every catalog number has exactly one skill section and that every tool a skill names exists.

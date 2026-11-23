@@ -32,8 +32,9 @@ export function fitSize(w, h, cap) {
   return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)), scaled: true };
 }
 
-/** Make every embedded image decode at most `cap` pixels on its longer side. Returns an uninstall function. */
-export function installTextureLimit(cap, target = globalThis, log = () => {}, parallel = 2) {
+/** Make every embedded image decode at most `cap` pixels (a number, or a function read at each decode) on its longer side. Returns an uninstall function. */
+export function installTextureLimit(capOrFn, target = globalThis, log = () => {}, parallel = 2) {
+  const cap = () => (typeof capOrFn === 'function' ? capOrFn() : capOrFn);
   const original = target.createImageBitmap;
   if (typeof original !== 'function') return () => {};
   // Decode a couple of images at a time: all of them together is a memory spike on a 3.5 GB phone.
@@ -50,7 +51,7 @@ export function installTextureLimit(cap, target = globalThis, log = () => {}, pa
         const head = new Uint8Array(await src.slice(0, 262144).arrayBuffer());
         const d = imageSize(head);
         if (d) {
-          const f = fitSize(d.w, d.h, cap);
+          const f = fitSize(d.w, d.h, cap());
           if (f.scaled) {
             log('texture ' + d.w + 'x' + d.h + ' -> ' + f.w + 'x' + f.h);
             return original.call(target, src, Object.assign({}, rest[0] || {}, { resizeWidth: f.w, resizeHeight: f.h, resizeQuality: 'high' }));

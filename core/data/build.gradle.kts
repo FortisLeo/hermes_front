@@ -19,7 +19,7 @@ dependencies {
     implementation(libs.vosk.android)
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     implementation(libs.okhttp)
-    implementation(libs.androidx.room.runtime)
+    api(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.camera.core)

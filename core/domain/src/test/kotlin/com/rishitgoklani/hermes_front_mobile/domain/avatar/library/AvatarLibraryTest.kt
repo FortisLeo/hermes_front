@@ -82,11 +82,13 @@ class AvatarUseCasesTest {
         val nc = glbWith(ByteArray(8), listOf(bigPng(64, 64)), license = "CC_BY_NC")
         assertTrue(import(req(nc, enforce = true)) is ImportResult.Rejected); assertTrue(import(req(nc, enforce = false)) is ImportResult.Imported); assertEquals(1, files.models.size)
     }
-    @Test fun provenMarksOkAndReconcileBreaksUnprovenAndFallsBackToEyes() = runBlocking {
+    @Test fun provenMarksOkAndReconcileBlamesOnlyTheModelThatWasOnScreen() = runBlocking {
         val a = (import(req(glbWith(ByteArray(8), listOf(bigPng(64, 64))))) as ImportResult.Imported).entry; val b = (import(req(glbWith(ByteArray(8), listOf(bigPng(64, 64))))) as ImportResult.Imported).entry
+        val c = (import(req(glbWith(ByteArray(8), listOf(bigPng(64, 64))))) as ImportResult.Imported).entry
         MarkProven(lib)(a.id); active.set(AvatarSlot.Model(b.id))
         val broken = ReconcilePending(lib, active)()
-        assertEquals(listOf(b.id), broken.map { it.id }); assertEquals(AvatarStatus.OK, lib.get(a.id)!!.status); assertEquals(AvatarStatus.BROKEN, lib.get(b.id)!!.status); assertEquals(AvatarSlot.Eyes, active.current())
+        assertEquals(listOf(b.id), broken.map { it.id }); assertEquals(AvatarStatus.OK, lib.get(a.id)!!.status); assertEquals(AvatarStatus.BROKEN, lib.get(b.id)!!.status); assertEquals(AvatarStatus.PENDING, lib.get(c.id)!!.status); assertEquals(AvatarSlot.Eyes, active.current())
+        assertTrue(ReconcilePending(lib, active)().isEmpty())
     }
     @Test fun selectTouchesAndRefusesBrokenOrUnknown() = runBlocking {
         lib.add(entry("a", 1)); lib.add(entry("bad", 2, status = AvatarStatus.BROKEN)); val select = SelectAvatar(lib, active) { 999 }

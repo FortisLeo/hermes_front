@@ -101,6 +101,7 @@ time_now
 lock_display
 avatar_import
 avatar_catalog
+avatar_library
 avatar_download
 face_bubble
 overlay_draw

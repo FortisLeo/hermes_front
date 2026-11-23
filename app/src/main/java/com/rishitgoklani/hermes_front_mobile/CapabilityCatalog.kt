@@ -85,7 +85,8 @@ class CatalogDeps(
     val pip: () -> (() -> Boolean)? = { null },
     val avatar: com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController? = null,
     val avatarCatalog: com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarCatalogSource? = null,
-    val avatarInstaller: com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller? = null,
+    val avatarInstaller: com.rishitgoklani.hermes_front_mobile.domain.avatar.ModelInstaller? = null,
+    val avatarLibraryTool: com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability? = null,
 )
 
 /** Builds the full tool set Hermes can call. One place to add a capability (open/closed: append a line). */
@@ -123,7 +124,8 @@ object CapabilityCatalog {
                 val dir = File(d.app.filesDir, "avatar")
                 add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarImportCapability(
                     stage = { src -> dir.mkdirs(); val tmp = File(dir, "incoming.vrm"); val r = ProcessCommandRunner().run("cp '${src.replace("'", "")}' '${tmp.path}' && chmod 644 '${tmp.path}'", root = true); if (r.exitCode == 0 && tmp.isFile) tmp.readBytes().also { tmp.delete() } else null },
-                    install = { b -> val inst = d.avatarInstaller; if (inst == null) File(dir, "model.vrm").writeBytes(b) else (inst.install(b, enforceLicense = false) as? com.rishitgoklani.hermes_front_mobile.domain.avatar.InstallResult.Rejected)?.let { error(it.reason) } }))
+                    install = { b -> (d.avatarInstaller!!.install(b, enforceLicense = false, source = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource.AGENT) as? com.rishitgoklani.hermes_front_mobile.domain.avatar.InstallResult.Rejected)?.let { error(it.reason) } }))
+                d.avatarLibraryTool?.let { add(it) }
                 if (d.avatarCatalog != null && d.avatarInstaller != null) { add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarCatalogCapability(d.avatarCatalog)); add(com.rishitgoklani.hermes_front_mobile.domain.avatar.avatarDownloadCapability(d.avatarCatalog, d.avatarInstaller)) }
                 val clipDir = File(dir, "clips")
                 val clips = { clipDir.listFiles { f -> f.extension == "vrma" }?.map { it.nameWithoutExtension }?.sorted().orEmpty() }

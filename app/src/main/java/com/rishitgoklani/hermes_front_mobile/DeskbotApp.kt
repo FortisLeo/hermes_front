@@ -1,5 +1,8 @@
 package com.rishitgoklani.hermes_front_mobile
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 import android.app.Application
 import androidx.lifecycle.ViewModel
@@ -83,25 +86,23 @@ class AppContainer(private val app: Application) {
     @Volatile var pipRequest: (() -> Boolean)? = null
     val avatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController()
     val avatarDir: File get() = File(app.filesDir, "avatar")
-    /** Changes whenever a new model is installed, so the viewer reloads. */
-    val avatarModelVersion = kotlinx.coroutines.flow.MutableStateFlow(File(File(app.filesDir, "avatar"), "model.vrm").lastModified())
-    /** Longest texture side the viewer may decode for the current model (chosen per model by TextureBudget). */
-    val avatarTextureCap = kotlinx.coroutines.flow.MutableStateFlow(app.getSharedPreferences("deskbot", android.content.Context.MODE_PRIVATE).getInt("avatar_tex_cap", 1024))
-    /** What the Avatar screen tells the user about the current model (textures shrunk, or a rollback). */
-    val avatarNote = kotlinx.coroutines.flow.MutableStateFlow(app.getSharedPreferences("deskbot", android.content.Context.MODE_PRIVATE).getString("avatar_note", null))
+    val avatarLibraryDir: File get() = File(app.filesDir, "avatars")
     val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog(cacheDir = File(app.cacheDir, "avatar-thumbs"))
-    /** The one way a model becomes the avatar (license-checked by the installer): write atomically, turn the avatar on, reload the viewer. */
-    val avatarInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller { bytes ->
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            avatarDir.mkdirs(); val tmp = File(avatarDir, "model.vrm.tmp"); tmp.writeBytes(bytes)
-            val cur = File(avatarDir, "model.vrm"); val prev = File(avatarDir, "model.prev.vrm")
-            if (cur.isFile) { prev.delete(); cur.renameTo(prev) }
-            check(tmp.renameTo(cur)) { "could not save model" }
-            val plan = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.plan(bytes); val cap = plan.cap
-            prefs.edit().putBoolean("avatar_model_pending", true).putInt("avatar_tex_cap", cap).putString("avatar_note", plan.note()).commit(); avatarTextureCap.value = cap; avatarNote.value = plan.note()   // cleared once the viewer has rendered it for a while
-        }
-        avatar.setNodes(emptyList()); avatarModelVersion.value = System.currentTimeMillis(); avatar.setEnabled(true)
-    }
+    // Avatar library: Room rows + optimized model files, the active slot in DataStore, and the use cases on top.
+    private val avatarDb = com.rishitgoklani.hermes_front_mobile.data.avatar.DeskbotDatabases.create(app)
+    val avatarLibrary: com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarLibrary = com.rishitgoklani.hermes_front_mobile.data.avatar.RoomAvatarLibrary(avatarDb.avatars())
+    val avatarFiles: com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarFiles = com.rishitgoklani.hermes_front_mobile.data.avatar.FileAvatarFiles(avatarLibraryDir)
+    val avatarSlot: com.rishitgoklani.hermes_front_mobile.domain.avatar.library.ActiveSlotStore = com.rishitgoklani.hermes_front_mobile.data.avatar.DataStoreActiveSlotStore.create(app)
+    private val importAvatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.ImportAvatar(avatarLibrary, avatarFiles, com.rishitgoklani.hermes_front_mobile.domain.avatar.library.GlbOptimizer(com.rishitgoklani.hermes_front_mobile.data.avatar.BitmapImageTranscoder()), { java.util.UUID.randomUUID().toString() }, System::currentTimeMillis)
+    val selectAvatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.SelectAvatar(avatarLibrary, avatarSlot, System::currentTimeMillis)
+    val cycleAvatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.CycleAvatar(avatarLibrary, avatarSlot, selectAvatar)
+    val removeAvatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.RemoveAvatar(avatarLibrary, avatarFiles, avatarSlot)
+    private val markProven = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.MarkProven(avatarLibrary)
+    /** The one way a model becomes an avatar: optimize, store, add to the library, show it. */
+    val avatarInstaller: com.rishitgoklani.hermes_front_mobile.domain.avatar.ModelInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.LibraryInstaller(importAvatar, selectAvatar)
+    val avatarSnapshots = com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarSnapshots()
+    /** A model proves itself once the viewer showed it and the app survived 20 s; until then a crash marks it BROKEN at the next start. */
+    private fun proveLater(id: String) { scope.launch { kotlinx.coroutines.delay(20_000); markProven(id) } }
     val audit = FileAuditLog(File(app.filesDir, "audit.log"))
 
     // Face, personas, quick actions
@@ -177,7 +178,8 @@ class AppContainer(private val app: Application) {
         AndroidFaceCounter(), kill, routines, ambient, selfChecks, a2ui,
         { surface -> _screenRequests.tryEmit(surface); runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
         Triple({ prefs.getBoolean("show_locked", false) }, { v: Boolean -> prefs.edit().putBoolean("show_locked", v).apply() }, { runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }),
-        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }, avatarCatalog = avatarCatalog, avatarInstaller = avatarInstaller))
+        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }, avatarCatalog = avatarCatalog, avatarInstaller = avatarInstaller,
+        avatarLibraryTool = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.avatarLibraryCapability(avatarLibrary, avatarSlot, selectAvatar, cycleAvatar, removeAvatar)))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
     val engine = RoutineEngine(routines, runCapability, audit = audit)
@@ -195,21 +197,33 @@ class AppContainer(private val app: Application) {
     private val greeter = com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) })
     private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     init {
-        // A freshly installed model that killed the app before it could prove itself is rolled back, so it cannot crash-loop the app.
-        when (com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.onStart(prefs.getBoolean("avatar_model_pending", false), File(avatarDir, "model.prev.vrm").isFile)) {
-            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.RestorePrevious -> { File(avatarDir, "model.vrm").delete(); File(avatarDir, "model.prev.vrm").renameTo(File(avatarDir, "model.vrm")); avatarModelVersion.value = System.currentTimeMillis(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; restored the previous one"); prefs.edit().putString("avatar_note", "The last model you added crashed the app, so the previous one was restored.").apply(); avatarNote.value = "The last model you added crashed the app, so the previous one was restored." }
-            com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.Action.Remove -> { File(avatarDir, "model.vrm").delete(); prefs.edit().putBoolean("avatar_mode", false).apply(); android.util.Log.w("DeskbotAvatar", "new model crashed the app; removed it"); prefs.edit().putString("avatar_note", "The last model you added crashed the app and was removed.").apply(); avatarNote.value = "The last model you added crashed the app and was removed." }
-            else -> {}
-        }
-        prefs.edit().remove("avatar_model_pending").apply()
+        // A model still PENDING means the app died before it proved itself: mark it BROKEN (the library shows it) and show the eyes.
+        kotlinx.coroutines.runBlocking(Dispatchers.IO) { com.rishitgoklani.hermes_front_mobile.domain.avatar.library.ReconcilePending(avatarLibrary, avatarSlot)() }
         // Avatar safety: if the process died twice in a row while the 3D avatar was on (the phone is memory-starved), fall back to the eyes face.
         val d = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarSafety.onStart(prefs.getBoolean("avatar_mode", false), prefs.getInt("avatar_unclean", 0))
-        prefs.edit().putBoolean("avatar_mode", d.avatarOn).putInt("avatar_unclean", d.uncleanCount).apply()
-        avatar.setEnabled(prefs.getBoolean("avatar_mode", false))
+        prefs.edit().putInt("avatar_unclean", d.uncleanCount).apply()
+        if (!d.avatarOn) kotlinx.coroutines.runBlocking(Dispatchers.IO) { avatarSlot.set(com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Eyes) }
         scope.launch { kotlinx.coroutines.delay(60_000); prefs.edit().putInt("avatar_unclean", 0).apply() }
-        // The model has proved itself once the viewer reported its bones and the app then survived 20 s: only then is it safe to forget the rollback copy's purpose.
-        scope.launch { avatar.nodes.collectLatest { if (it.isNotEmpty()) { kotlinx.coroutines.delay(20_000); prefs.edit().remove("avatar_model_pending").apply() } } }
-        scope.launch { avatar.state.collect { prefs.edit().putBoolean("avatar_mode", it.enabled).apply() } }
+        // The old single model.vrm becomes the first library entry (once), then the legacy files go.
+        scope.launch(Dispatchers.IO) {
+            val legacy = File(avatarDir, "model.vrm")
+            if (legacy.isFile) {
+                val bytes = runCatching { legacy.readBytes() }.getOrNull()
+                val entry = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.MigrateLegacyAvatar(avatarLibrary, importAvatar, markProven, selectAvatar)(bytes, prefs.getBoolean("avatar_mode", false))
+                if (entry != null || avatarLibrary.all().isNotEmpty()) { legacy.delete(); File(avatarDir, "model.prev.vrm").delete(); File(avatarDir, "snap.png").delete() }
+            }
+        }
+        // The slot is the truth; AvatarController.enabled mirrors it (and the avatar_mode tool flips the slot back through the controller).
+        scope.launch { avatarSlot.slot().collect { slot -> avatar.setEnabled(slot is com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Model); prefs.edit().putBoolean("avatar_mode", slot is com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Model).apply() } }
+        scope.launch {
+            avatar.state.map { it.enabled }.distinctUntilChanged().drop(1).collect { want ->
+                val cur = avatarSlot.current(); val isModel = cur is com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Model
+                if (want && !isModel) {
+                    val last = avatarLibrary.all().filter { it.status != com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarStatus.BROKEN }.maxByOrNull { it.lastUsedAt }
+                    if (last != null) selectAvatar(com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Model(last.id)) else avatar.setEnabled(false)
+                } else if (!want && isModel) selectAvatar(com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Eyes)
+            }
+        }
         scope.launch { face.state.collect { avatar.setMood(it.mood); avatar.look(it.lookX, it.lookY) } }
         scope.launch { tts.openness.collect { avatar.setMouth(it) } }
     }
@@ -257,7 +271,11 @@ class AppContainer(private val app: Application) {
     fun chatViewModel(owner: ViewModelStoreOwner): ChatViewModel = vm(owner) { ChatViewModel(hermes, face::apply) }
     fun settingsViewModel(owner: ViewModelStoreOwner): SettingsViewModel = vm(owner) { SettingsViewModel(settings) }
     fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource) }
-    fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller) }
+    fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller, avatarLibrary, avatarSlot, selectAvatar, removeAvatar) }
+    fun avatarCarouselViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel = vm(owner) {
+        val am = app.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel(avatarLibrary, avatarSlot, avatarFiles, cycleAvatar, ::proveLater, avatarSnapshots, { android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.lowMemory }, log = { android.util.Log.d("DeskbotAvatar", it) })
+    }
 
     private inline fun <reified T : ViewModel> vm(owner: ViewModelStoreOwner, crossinline create: () -> T): T =
         ViewModelProvider(owner, object : ViewModelProvider.Factory {

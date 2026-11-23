@@ -66,13 +66,22 @@ sealed interface InstallResult {
     data class Rejected(val reason: String) : InstallResult
 }
 
-/** One place that decides whether model bytes become the avatar: license-checks first, installs only accepted models. Used by upload, catalog and the agent tools. */
-class AvatarInstaller(private val store: suspend (ByteArray) -> Unit) {
+/** One way for model bytes to become an avatar: the library installer (Room) in the app, or the simple store-based one in tests. */
+interface ModelInstaller {
     /** [enforceLicense] is true for downloads; the user's own uploaded files skip the license rule but must still be valid VRMs. */
-    suspend fun install(bytes: ByteArray, enforceLicense: Boolean = true): InstallResult = AvatarModelGuard.problem(bytes)?.let { InstallResult.Rejected(it) } ?: when (val c = VrmLicense.check(bytes, enforceLicense)) {
-        is VrmCheck.Rejected -> InstallResult.Rejected(c.reason)
-        is VrmCheck.Ok -> { store(bytes); InstallResult.Installed(c.info) }
-    }
+    suspend fun install(
+        bytes: ByteArray, enforceLicense: Boolean = true, name: String = "", source: com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource.UPLOAD,
+        onProgress: (com.rishitgoklani.hermes_front_mobile.domain.avatar.library.ImportProgress) -> Unit = {},
+    ): InstallResult
+}
+
+/** Checks a model and hands accepted bytes to [store]. */
+class AvatarInstaller(private val store: suspend (ByteArray) -> Unit) : ModelInstaller {
+    override suspend fun install(bytes: ByteArray, enforceLicense: Boolean, name: String, source: com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource, onProgress: (com.rishitgoklani.hermes_front_mobile.domain.avatar.library.ImportProgress) -> Unit): InstallResult =
+        AvatarModelGuard.problem(bytes)?.let { InstallResult.Rejected(it) } ?: when (val c = VrmLicense.check(bytes, enforceLicense)) {
+            is VrmCheck.Rejected -> InstallResult.Rejected(c.reason)
+            is VrmCheck.Ok -> { store(bytes); InstallResult.Installed(c.info) }
+        }
 }
 
 /** avatar_catalog: browse the OpenSourceAvatars registry (collections, or avatars of one collection, optionally filtered). */
@@ -93,7 +102,7 @@ fun avatarCatalogCapability(source: AvatarCatalogSource) = Capability(
 }
 
 /** avatar_download: fetch one catalog avatar, license-check it and make it the avatar. */
-fun avatarDownloadCapability(source: AvatarCatalogSource, installer: AvatarInstaller) = Capability(
+fun avatarDownloadCapability(source: AvatarCatalogSource, installer: ModelInstaller) = Capability(
     "avatar_download", "Download an avatar from the OpenSourceAvatars catalog (collection + id or exact name) and use it. Models with non-permissive licenses are rejected.",
     """{"type":"object","properties":{"collection":{"type":"string"},"id":{"type":"string"}},"required":["collection","id"]}""",
 ) { a ->
@@ -101,7 +110,7 @@ fun avatarDownloadCapability(source: AvatarCatalogSource, installer: AvatarInsta
         val col = findCollection(source, a["collection"]?.jsonPrimitive?.contentOrNull) ?: return@runCatching ActionResult.failed("unknown collection")
         val key = a["id"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val av = source.avatars(col).firstOrNull { it.id == key } ?: source.avatars(col).firstOrNull { it.name.equals(key, true) } ?: return@runCatching ActionResult.failed("no avatar '$key' in ${col.id}")
-        when (val r = installer.install(source.download(av.modelUrl))) {
+        when (val r = installer.install(source.download(av.modelUrl), enforceLicense = true, name = av.name, source = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource.CATALOG)) {
             is InstallResult.Rejected -> ActionResult.failed("Model rejected: ${r.reason}")
             is InstallResult.Installed -> ActionResult.completed("Using '${av.name}' from ${col.name} (${r.info.license})")
         }

@@ -2,6 +2,8 @@ package com.rishitgoklani.hermes_front_mobile
 
 import android.os.Bundle
 import android.view.WindowManager
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot
+import androidx.compose.foundation.verticalScroll
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -64,7 +66,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 /** Everything lives on the face. Chat, voice, debug and settings sit in a hidden drawer (swipe in from the left edge). */
-private enum class Section(val label: String) { Chat("Chat"), Voice("Voice"), Debug("Debug"), Settings("Settings"), Avatar("Avatar") }
+private enum class Section(val label: String) { Chat("Chat"), Voice("Voice"), Debug("Debug"), Settings("Settings"), Avatar("Avatars") }
 
 class MainActivity : ComponentActivity() {
     private val container by lazy { (application as DeskbotApp).container }
@@ -101,6 +103,15 @@ class MainActivity : ComponentActivity() {
         val drawer = rememberDrawerState(DrawerValue.Closed)
         var section by remember { mutableStateOf<Section?>(Section.entries.firstOrNull { it.name.equals(intent?.getStringExtra("section"), true) }) }
         val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
+        val carousel = container.avatarCarouselViewModel(this)
+        val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
+        val viewerEvents = remember(carousel) { object : com.rishitgoklani.hermes_front_mobile.ui.avatar.ViewerEvents {
+            override fun onShown(key: String, ms: Long, wasStaged: Boolean) = carousel.onShown(key, ms, wasStaged)
+            override fun onStaged(key: String, ms: Long) = carousel.onStaged(key, ms)
+            override fun onError(key: String, message: String) = carousel.onError(key, message)
+            override fun onNodes(names: List<String>) = container.avatar.setNodes(names)
+            override fun onHead(x: Float, y: Float, size: Float) { head.value = Triple(x, y, size) }
+        } }
         val face by container.face.state.collectAsStateWithLifecycle()
         val chatState by chat.state.collectAsStateWithLifecycle(); val voiceState by voice.state.collectAsStateWithLifecycle()
         val wakeOn by container.wake.enabled.collectAsStateWithLifecycle(); val wakeBot by container.wake.state.collectAsStateWithLifecycle()
@@ -140,22 +151,29 @@ class MainActivity : ComponentActivity() {
             drawerState = drawer, gesturesEnabled = section == null,
             drawerContent = {
                 ModalDrawerSheet {
+                  Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                     Text("Deskbot", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
                     Section.entries.forEach { s -> NavigationDrawerItem(label = { Text(s.label) }, selected = false, onClick = { section = s; scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp)) }
                     NavigationDrawerItem(label = { Text(if (wakeOn) "Stop listening" else "Always listen") }, selected = false, onClick = { container.wake.toggle(); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                     Text("Swipe left or press back to hide", Modifier.padding(20.dp), style = MaterialTheme.typography.bodySmall)
+                  }
                 }
             },
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
-                val av by container.avatar.state.collectAsStateWithLifecycle(); val modelVersion by container.avatarModelVersion.collectAsStateWithLifecycle(); val texCap by container.avatarTextureCap.collectAsStateWithLifecycle()
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && section != Section.Avatar && java.io.File(container.avatarDir, "model.vrm").isFile) ({ val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
+                val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
-                        androidx.compose.runtime.key(modelVersion) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, textureCap = texCap, onNodes = container.avatar::setNodes, onHead = { x, y, h -> head.value = Triple(x, y, h) }) }
+                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots)
+                        // While the viewer is still loading the model (e.g. coming from the eyes) the eyes stay on screen, then fade out.
+                        androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))) {
+                            com.rishitgoklani.hermes_front_mobile.ui.face.FaceView(bot, face, Modifier.fillMaxSize(), mouth = mouth, backgroundColor = background)
+                        }
                         com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects, head.value.first, head.value.second, head.value.third)
                     } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
+                    onSwipeNext = if (section == null && liveScreen == null && carouselUi.slotCount > 1) carousel::swipeNext else null,
                     overlay = {
-                        if (liveScreen == null) { if (!inPip.value) { if (av.enabled) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
+                        if (liveScreen == null) { if (!inPip.value) { if (carouselUi.slot is AvatarSlot.Model) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {
                             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))) {
                                 Column {
@@ -178,10 +196,10 @@ class MainActivity : ComponentActivity() {
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
                                         DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode) }
-                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); val ver by container.avatarModelVersion.collectAsStateWithLifecycle(); val texCap2 by container.avatarTextureCap.collectAsStateWithLifecycle(); val note by container.avatarNote.collectAsStateWithLifecycle(); val lib by library.state.collectAsStateWithLifecycle()
+                                    Section.Avatar -> { val lib by library.state.collectAsStateWithLifecycle()
                                         LaunchedEffect(lib.message) { if (lib.message != null) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
-                                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, preview = { androidx.compose.runtime.key(ver) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, textureCap = texCap2, onNodes = container.avatar::setNodes) } },
-                                            avatarOn = av.enabled, onToggleAvatar = { container.avatar.setEnabled(!av.enabled) }, onUpload = { pickVrm.launch(arrayOf("*/*")) }, modelNote = note, onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail) }
+                                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, onUse = { slot -> library.use(slot); section = null }, onRetry = library::retry, onRemove = library::removeAvatar, onUpload = { pickVrm.launch(arrayOf("*/*")) },
+                                            onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail) }
                                     Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save) }
                                 }
                             }

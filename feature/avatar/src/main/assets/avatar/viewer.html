@@ -9,8 +9,10 @@ import { GLTFLoader } from './lib/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from './lib/three-vrm.module.min.js';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from './lib/three-vrm-animation.module.min.js';
 import { installTextureLimit } from './texture-budget.js';
+import { createSlots } from './model-slots.js';
 // The app picks the texture size cap for this model (?tex=1024); big textures are decoded straight at that size.
-installTextureLimit(Number(new URLSearchParams(location.search).get('tex')) || 1024, window, m => console.log(m));
+let texCap = Number(new URLSearchParams(location.search).get('tex')) || 1024;
+installTextureLimit(() => texCap, window, m => console.log(m));
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
 renderer.setPixelRatio(1);  // this phone has 3.5 GB RAM; full-res WebGL gets the app killed under memory pressure
@@ -46,21 +48,48 @@ window.avatar = { apply(json) { try { const n = typeof json === 'string' ? JSON.
   if (JSON.stringify(n.anim) !== JSON.stringify(st.anim)) animStart = performance.now();
   if (JSON.stringify(n.pose) !== JSON.stringify(st.pose)) poseChangedAt = performance.now();
   if ((n.clip || '') !== clipName) setClip(n.clip || ''); st = n; } catch (e) {} }, ready: false };
+window.avatar.thumb = (n = 256) => { const k = Math.min(n / Math.max(1, view.width), n / Math.max(1, view.height)), w = Math.max(1, Math.round(view.width * k)), h = Math.max(1, Math.round(view.height * k)); const c = document.createElement('canvas'); c.width = n; c.height = n; const x = c.getContext('2d'); x.fillStyle = '#05070A'; x.fillRect(0, 0, n, n); x.drawImage(view, (n - w) >> 1, (n - h) >> 1, w, h); return c.toDataURL('image/png'); };
 window.avatar.snap = () => { renderer.render(scene, camera); vctx.drawImage(renderer.domElement, 0, 0); return view.toDataURL('image/png'); };
 const clock = new THREE.Clock();
 const lerp = (a, b, k) => a + (b - a) * k;
 
-new GLTFLoader().register(p => new VRMLoaderPlugin(p)).load('https://appassets.androidplatform.net/model/model.vrm', g => {
-  vrm = g.userData.vrm; VRMUtils.rotateVRM0(vrm); scene.add(vrm.scene);
-  vrm.scene.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(vrm.scene), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+// ---- model slots: the active model plus (at most) one staged behind it; see model-slots.js ----
+const caps = {};
+const loadVrm = (url) => new Promise((res, rej) => new GLTFLoader().register(p => new VRMLoaderPlugin(p)).load(url, g => { const v = g.userData.vrm; VRMUtils.rotateVRM0(v); res(v); }, undefined, rej));
+function frameModel(v) {
+  v.scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(v.scene), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
   modelTop = box.max.y;
-  const half = THREE.MathUtils.degToRad(15);
-  const dist = (size.y / 2) / Math.tan(half) * 1.08;
+  const dist = (size.y / 2) / Math.tan(THREE.MathUtils.degToRad(15)) * 1.08;
   camera.position.set(c.x, c.y, c.z + dist); camera.lookAt(c);
-  console.log('bbox', JSON.stringify(size), JSON.stringify(c), 'dist', dist, 'aspect', camera.aspect, 'canvas', innerWidth, innerHeight);
-  window.avatar.ready = true; document.title = 'ready';
-}, undefined, e => { document.title = 'error:' + e; });
+}
+// Free a model completely: GPU textures, geometry, and the decoded ImageBitmaps (three.js keeps those alive after dispose()).
+function disposeVrm(v) {
+  v.scene.traverse(o => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { for (const k in m) { const t = m[k]; if (t && t.isTexture) { const d = t.source && t.source.data; if (d && typeof d.close === 'function') d.close(); } } }); });
+  VRMUtils.deepDispose(v.scene);
+}
+function resetModelState() {
+  for (const o of [raw, curBones, curExpr, curPos]) for (const k of Object.keys(o)) delete o[k];
+  restHipsY = null; curHips = [0, 0, 0]; mixer = null; clipActive = false; blinkT = -1;
+  if (clipName) { const n = clipName; clipName = ''; setClip(n); }
+}
+const slots = createSlots({
+  load: (url, key) => { texCap = caps[key] || texCap; return loadVrm(url); },
+  show: (v, key) => { vrm = v; scene.add(v.scene); resetModelState(); frameModel(v); window.avatar.ready = true; document.title = 'ready'; },
+  hide: v => { scene.remove(v.scene); if (vrm === v) vrm = null; },
+  dispose: disposeVrm,
+  onEvent: e => {
+    console.log('SLOT', JSON.stringify(e));
+    const N = window.Native; if (!N) return;
+    if (e.type === 'model' && N.onModel) N.onModel(e.key, e.ms, !!e.staged);
+    else if (e.type === 'staged' && N.onStaged) N.onStaged(e.key, e.ms);
+    else if (e.type === 'error' && N.onError) N.onError(e.key, e.message);
+  },
+});
+window.avatar.setModel = (key, url, cap) => { caps[key] = cap || 1024; slots.setModel(key, url); };
+window.avatar.stage = (key, url, cap) => { caps[key] = cap || 1024; slots.stage(key, url); };
+window.avatar.unload = () => { slots.unload(); window.avatar.ready = false; };
+window.avatar.resident = () => slots.resident();
 
 const raw = {};  // non-humanoid nodes: captured rest transform, agent values are offsets from it
 function bone(n) { return vrm?.humanoid?.getNormalizedBoneNode(n) || null; }

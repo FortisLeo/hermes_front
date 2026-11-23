@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.rishitgoklani.hermes_front_mobile.domain.BotState
 import com.rishitgoklani.hermes_front_mobile.domain.behavior.QuickAction
@@ -33,9 +34,13 @@ fun FaceScreen(
     bot: BotState, face: FaceState, quickActions: List<QuickAction>, onAction: (QuickAction) -> Unit, onTap: () -> Unit,
     modifier: Modifier = Modifier, backgroundColor: Color = Color(0xFF05070A), mouth: Float = 0f, faceContent: (@Composable () -> Unit)? = null,
     overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+    /** Swipe right-to-left switches to the next face (eyes / avatars). Null disables the gesture. */
+    onSwipeNext: (() -> Unit)? = null,
 ) {
     var panel by remember { mutableStateOf(false) }
-    Box(modifier.fillMaxSize()) {
+    val swipe = remember { SwipeSlide() }
+    Box(modifier.fillMaxSize().swipeToNext(swipe, onSwipeNext)) {
+      Box(Modifier.fillMaxSize().graphicsLayer { translationX = swipe.offset.value; alpha = swipe.alpha }) {
         if (faceContent != null) Box(Modifier.fillMaxSize()) {
             faceContent()
             // Transparent layer on top: a WebView would swallow the touches, so taps and long-presses are caught here.
@@ -43,6 +48,7 @@ fun FaceScreen(
         }
         else FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
         overlay()
+      }
         if (panel) {
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
