@@ -29,7 +29,7 @@ import java.io.File
 @Composable
 fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier, onNodes: (List<String>) -> Unit = {}, onHead: (x: Float, y: Float, size: Float) -> Unit = { _, _, _ -> }) {
     val hasModel = File(avatarDir, "model.vrm").isFile
-    if (!hasModel) { Box(modifier.fillMaxSize(), Alignment.Center) { Text("No avatar model. Put a .vrm at ${avatarDir.path}/model.vrm", color = Color.Gray) }; return }
+    if (!hasModel) { Box(modifier.fillMaxSize(), Alignment.Center) { Text("No avatar yet. Upload a .vrm or pick one from the Catalog tab.", color = Color.Gray) }; return }
     val headCallback = androidx.compose.runtime.rememberUpdatedState(onHead)
     var web by remember { mutableStateOf<WebView?>(null) }
     val latest = androidx.compose.runtime.rememberUpdatedState(state)

@@ -100,6 +100,8 @@ sound_watch
 time_now
 lock_display
 avatar_import
+avatar_catalog
+avatar_download
 face_bubble
 overlay_draw
 pip_face

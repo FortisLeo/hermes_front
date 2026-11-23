@@ -17,3 +17,4 @@ Per CLAUDE.md: permissive licenses only, pinned versions, listed here.
 | androidx.webkit 1.12.1 | Google | Apache-2.0 | WebViewAssetLoader: serves bundled assets and the avatar folder to the viewer |
 
 Besides the two bundled JS libraries above (license files next to them), no source was copied from other projects; everything else is a dependency.
+| OpenSourceAvatars registry | https://github.com/ToxSam/open-source-avatars (data/projects.json, data/avatars/*.json) | repo has no licence file; models carry their own (CC0 / CC-BY) | Read at runtime only (catalog listing + model download); nothing is bundled. Every model is licence-checked by `VrmLicense` before install |

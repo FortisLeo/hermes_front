@@ -35,6 +35,10 @@ Everything below was captured from the real phone.
 | --- | --- | --- |
 | ![](docs/screenshots/avatar-agent-pose.png) | ![](docs/screenshots/avatar-agent-animation.png) | ![](docs/screenshots/avatar-vrma-clip.png) |
 
+| Avatar catalog (OpenSourceAvatars) | Upload a .vrm from the phone |
+|---|---|
+| ![](docs/screenshots/avatar-catalog.png) | ![](docs/screenshots/avatar-upload.png) |
+
 | Floating face bubble over other apps | Picture-in-picture face | Annotation overlay |
 | --- | --- | --- |
 | ![](docs/screenshots/floating-bubble.png) | ![](docs/screenshots/picture-in-picture.png) | ![](docs/screenshots/overlay-draw.png) |
@@ -49,7 +53,8 @@ The complete list, with the status of every one of the 384 catalogued features a
 - Presence: counts faces (no identity, frame discarded), eyes follow a detected face, arrival/departure fusion of camera, sound, motion and visual change, spoken greeting on arrival.
 
 **3D VRM avatar**
-- Import a model (licence-checked: CC0, CC-BY, CC-BY-SA, VRM "everyone"), show it as the face, and let the agent move **any bone or node** (`avatar_bones`, `avatar_pose`, `avatar_animate`); there are no preset motions. Imports and plays `.vrma` clips. Emotion effects, tap reactions, lip sync and gaze work on it too.
+- **Avatar screen** (hidden menu): *Upload .vrm* opens the file picker, and the *Catalog* tab browses the free [OpenSourceAvatars](https://www.opensourceavatars.com) registry (collections, search, previews); tap a model to download and use it. The agent can do the same with `avatar_catalog` and `avatar_download`.
+- Every model is licence-checked before it is installed (CC0, CC-BY, CC-BY-SA, VRM "everyone"; non-commercial or unclear licences are refused), shown as the face, and let the agent move **any bone or node** (`avatar_bones`, `avatar_pose`, `avatar_animate`); there are no preset motions. Imports and plays `.vrma` clips. Emotion effects, tap reactions, lip sync and gaze work on it too.
 
 **Voice**
 - Wake word ("Hey bot", offline Vosk), speech-to-text, Hermes streaming reply, sentence-chunked text-to-speech, barge-in ("stop"), vision on demand ("what is this?" attaches a camera frame), kill phrase.

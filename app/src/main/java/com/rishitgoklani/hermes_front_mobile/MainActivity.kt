@@ -68,6 +68,15 @@ private enum class Section(val label: String) { Chat("Chat"), Voice("Voice"), De
 
 class MainActivity : ComponentActivity() {
     private val container by lazy { (application as DeskbotApp).container }
+    private val library by lazy { container.avatarLibraryViewModel(this) }
+    /** System file picker for a .vrm (no MIME type exists for VRM, so any file is offered and the model check decides). */
+    private val pickVrm = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) lifecycleScope.launch {
+            val name = runCatching { contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull() ?: "file"
+            val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { contentResolver.openInputStream(uri)?.use { it.readNBytes(com.rishitgoklani.hermes_front_mobile.domain.avatar.VrmLicense.MAX_BYTES + 1) } }.getOrNull() }
+            library.importFile(name, bytes)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -139,10 +148,10 @@ class MainActivity : ComponentActivity() {
             },
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
-                val av by container.avatar.state.collectAsStateWithLifecycle()
+                val av by container.avatar.state.collectAsStateWithLifecycle(); val modelVersion by container.avatarModelVersion.collectAsStateWithLifecycle()
                 FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (av.enabled && java.io.File(container.avatarDir, "model.vrm").isFile) ({ val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
                     Box(Modifier.fillMaxSize()) {
-                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes, onHead = { x, y, h -> head.value = Triple(x, y, h) })
+                        androidx.compose.runtime.key(modelVersion) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes, onHead = { x, y, h -> head.value = Triple(x, y, h) }) }
                         com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects, head.value.first, head.value.second, head.value.third)
                     } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     overlay = {
@@ -169,7 +178,10 @@ class MainActivity : ComponentActivity() {
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
                                         DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode) }
-                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes) }
+                                    Section.Avatar -> { val av by container.avatar.state.collectAsStateWithLifecycle(); val ver by container.avatarModelVersion.collectAsStateWithLifecycle(); val lib by library.state.collectAsStateWithLifecycle()
+                                        LaunchedEffect(lib.message) { if (lib.message != null) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
+                                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, preview = { androidx.compose.runtime.key(ver) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, onNodes = container.avatar::setNodes) } },
+                                            avatarOn = av.enabled, onToggleAvatar = { container.avatar.setEnabled(!av.enabled) }, onUpload = { pickVrm.launch(arrayOf("*/*")) }, onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail) }
                                     Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save) }
                                 }
                             }

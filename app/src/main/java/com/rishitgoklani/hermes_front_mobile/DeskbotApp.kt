@@ -82,6 +82,14 @@ class AppContainer(private val app: Application) {
     @Volatile var pipRequest: (() -> Boolean)? = null
     val avatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController()
     val avatarDir: File get() = File(app.filesDir, "avatar")
+    /** Changes whenever a new model is installed, so the viewer reloads. */
+    val avatarModelVersion = kotlinx.coroutines.flow.MutableStateFlow(File(File(app.filesDir, "avatar"), "model.vrm").lastModified())
+    val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog()
+    /** The one way a model becomes the avatar (license-checked by the installer): write atomically, turn the avatar on, reload the viewer. */
+    val avatarInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller { bytes ->
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { avatarDir.mkdirs(); val tmp = File(avatarDir, "model.vrm.tmp"); tmp.writeBytes(bytes); check(tmp.renameTo(File(avatarDir, "model.vrm"))) { "could not save model" } }
+        avatar.setNodes(emptyList()); avatarModelVersion.value = System.currentTimeMillis(); avatar.setEnabled(true)
+    }
     val audit = FileAuditLog(File(app.filesDir, "audit.log"))
 
     // Face, personas, quick actions
@@ -157,7 +165,7 @@ class AppContainer(private val app: Application) {
         AndroidFaceCounter(), kill, routines, ambient, selfChecks, a2ui,
         { surface -> _screenRequests.tryEmit(surface); runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
         Triple({ prefs.getBoolean("show_locked", false) }, { v: Boolean -> prefs.edit().putBoolean("show_locked", v).apply() }, { runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }),
-        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }))
+        macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }, avatarCatalog = avatarCatalog, avatarInstaller = avatarInstaller))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
     val engine = RoutineEngine(routines, runCapability, audit = audit)
@@ -228,6 +236,7 @@ class AppContainer(private val app: Application) {
     fun chatViewModel(owner: ViewModelStoreOwner): ChatViewModel = vm(owner) { ChatViewModel(hermes, face::apply) }
     fun settingsViewModel(owner: ViewModelStoreOwner): SettingsViewModel = vm(owner) { SettingsViewModel(settings) }
     fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource) }
+    fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller) }
 
     private inline fun <reified T : ViewModel> vm(owner: ViewModelStoreOwner, crossinline create: () -> T): T =
         ViewModelProvider(owner, object : ViewModelProvider.Factory {
