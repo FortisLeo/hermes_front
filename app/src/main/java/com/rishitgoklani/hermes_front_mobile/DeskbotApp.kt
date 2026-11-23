@@ -85,6 +85,8 @@ class AppContainer(private val app: Application) {
     val avatarDir: File get() = File(app.filesDir, "avatar")
     /** Changes whenever a new model is installed, so the viewer reloads. */
     val avatarModelVersion = kotlinx.coroutines.flow.MutableStateFlow(File(File(app.filesDir, "avatar"), "model.vrm").lastModified())
+    /** Longest texture side the viewer may decode for the current model (chosen per model by TextureBudget). */
+    val avatarTextureCap = kotlinx.coroutines.flow.MutableStateFlow(app.getSharedPreferences("deskbot", android.content.Context.MODE_PRIVATE).getInt("avatar_tex_cap", 1024))
     val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog(cacheDir = File(app.cacheDir, "avatar-thumbs"))
     /** The one way a model becomes the avatar (license-checked by the installer): write atomically, turn the avatar on, reload the viewer. */
     val avatarInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller { bytes ->
@@ -93,7 +95,8 @@ class AppContainer(private val app: Application) {
             val cur = File(avatarDir, "model.vrm"); val prev = File(avatarDir, "model.prev.vrm")
             if (cur.isFile) { prev.delete(); cur.renameTo(prev) }
             check(tmp.renameTo(cur)) { "could not save model" }
-            prefs.edit().putBoolean("avatar_model_pending", true).commit()   // cleared once the viewer has rendered it for a while
+            val cap = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarModelGuard.textureCap(bytes)
+            prefs.edit().putBoolean("avatar_model_pending", true).putInt("avatar_tex_cap", cap).commit(); avatarTextureCap.value = cap   // cleared once the viewer has rendered it for a while
         }
         avatar.setNodes(emptyList()); avatarModelVersion.value = System.currentTimeMillis(); avatar.setEnabled(true)
     }

@@ -27,7 +27,7 @@ import java.io.File
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier, onNodes: (List<String>) -> Unit = {}, onHead: (x: Float, y: Float, size: Float) -> Unit = { _, _, _ -> }) {
+fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifier, textureCap: Int = 1024, onNodes: (List<String>) -> Unit = {}, onHead: (x: Float, y: Float, size: Float) -> Unit = { _, _, _ -> }) {
     val hasModel = File(avatarDir, "model.vrm").isFile
     if (!hasModel) { Box(modifier.fillMaxSize(), Alignment.Center) { Text("No avatar yet. Upload a .vrm or pick one from the Catalog tab.", color = Color.Gray) }; return }
     val headCallback = androidx.compose.runtime.rememberUpdatedState(onHead)
@@ -55,7 +55,7 @@ fun AvatarView(state: AvatarState, avatarDir: File, modifier: Modifier = Modifie
             }
             setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
             setBackgroundColor(0xFF05070A.toInt())
-            loadUrl("https://appassets.androidplatform.net/assets/avatar/viewer.html"); web = this
+            loadUrl("https://appassets.androidplatform.net/assets/avatar/viewer.html?tex=$textureCap"); web = this
         }
     }, onRelease = { it.destroy() })
     // Test hook: `touch files/avatar/snap.request` and the viewer writes snap.png (the compositor cannot screenshot WebGL on some phones).

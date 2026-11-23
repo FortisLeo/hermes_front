@@ -58,7 +58,7 @@ fun avatarImportCapability(stage: suspend (String) -> ByteArray?, install: suspe
 ) { a ->
     val path = a["path"]?.jsonPrimitive?.contentOrNull ?: return@Capability ActionResult.failed("path required")
     val bytes = stage(path) ?: return@Capability ActionResult.failed("cannot read $path")
-    AvatarModelGuard.sizeProblem(bytes.size)?.let { return@Capability ActionResult.failed("Model rejected: $it") }
+    AvatarModelGuard.problem(bytes)?.let { return@Capability ActionResult.failed("Model rejected: $it") }
     when (val c = VrmLicense.check(bytes, enforceLicense = false)) {
         is VrmCheck.Rejected -> ActionResult.failed("Model rejected: ${c.reason}")
         is VrmCheck.Ok -> { install(bytes); ActionResult.completed("Imported '${c.info.title}' by ${c.info.author} (${c.info.license})") }

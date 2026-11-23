@@ -58,6 +58,7 @@ The complete list, with the status of every one of the 384 catalogued features a
 
 **3D VRM avatar**
 - **Avatar screen** (hidden menu): *Upload .vrm* opens the file picker, and the *Catalog* tab browses the free [OpenSourceAvatars](https://www.opensourceavatars.com) registry (collections, search, previews); tap a model to download and use it. The agent can do the same with `avatar_catalog` and `avatar_download`.
+- Big models work: textures are shrunk while loading (the app picks 2048/1024/512/256 px from the model's estimated GPU memory), so a 20 MB VRM with 4K textures renders on a 3.5 GB phone. Models over 50 MB or with absurdly many textures are refused, and a model that still kills the app is rolled back automatically.
 - Catalog downloads are licence-checked (CC0, CC-BY, CC-BY-SA, VRM "everyone"; others are refused). Your own uploaded files skip the licence rule but must still be valid VRM files. The model is shown as the face, and the agent can move **any bone or node** (`avatar_bones`, `avatar_pose`, `avatar_animate`); there are no preset motions. Imports and plays `.vrma` clips. Emotion effects, tap reactions, lip sync and gaze work on it too.
 
 **Voice**

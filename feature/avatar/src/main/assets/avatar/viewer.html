@@ -8,6 +8,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from './lib/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from './lib/three-vrm.module.min.js';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from './lib/three-vrm-animation.module.min.js';
+import { installTextureLimit } from './texture-budget.js';
+// The app picks the texture size cap for this model (?tex=1024); big textures are decoded straight at that size.
+installTextureLimit(Number(new URLSearchParams(location.search).get('tex')) || 1024, window, m => console.log(m));
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
 renderer.setPixelRatio(1);  // this phone has 3.5 GB RAM; full-res WebGL gets the app killed under memory pressure
