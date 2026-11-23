@@ -26,6 +26,8 @@ class OsaHttpCatalog(
     private val fileUrl: (CatalogCollection) -> String = OsaCatalog::fileUrl,
     private val guard: (String) -> String? = UrlGuard::check,
     private val retryDelayMs: Long = 1500,
+    /** Where preview images are kept between visits (null = memory only). Old files are trimmed to [CACHE_MAX_FILES]. */
+    private val cacheDir: java.io.File? = null,
 ) : AvatarCatalogSource {
     /** Preview images come from a host that answers 429 when many are requested at once, so only a few run in parallel. */
     private val thumbSlots = Semaphore(3)
@@ -40,7 +42,18 @@ class OsaHttpCatalog(
 
     override suspend fun download(url: String): ByteArray = firstOf(url, VrmLicense.MAX_BYTES)
 
-    override suspend fun thumbnail(url: String): ByteArray? = thumbSlots.withPermit { runCatching { firstOf(url, THUMB_MAX) }.getOrNull() }
+    override suspend fun thumbnail(url: String): ByteArray? = thumbSlots.withPermit { readCache(url) ?: runCatching { firstOf(url, THUMB_MAX) }.getOrNull()?.also { writeCache(url, it) } }
+
+    private fun cacheFile(url: String) = cacheDir?.let { java.io.File(it, java.security.MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString("") { b -> "%02x".format(b) }.take(40)) }
+    private suspend fun readCache(url: String): ByteArray? = withContext(Dispatchers.IO) { cacheFile(url)?.takeIf { it.isFile && it.length() > 0 }?.let { f -> runCatching { f.readBytes() }.getOrNull() } }
+    private suspend fun writeCache(url: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
+        val f = cacheFile(url) ?: return@withContext
+        runCatching {
+            f.parentFile?.mkdirs(); f.writeBytes(bytes)
+            val all = f.parentFile?.listFiles().orEmpty()
+            if (all.size > CACHE_MAX_FILES) all.sortedBy { it.lastModified() }.take(all.size - CACHE_MAX_FILES).forEach { it.delete() }
+        }
+    }
 
     /** arweave.net is often slow or down; the same transaction id is served by another public gateway, so try that when the first fails. */
     private suspend fun firstOf(url: String, max: Int): ByteArray {
@@ -74,5 +87,5 @@ class OsaHttpCatalog(
         }
     }
 
-    private companion object { val ARWEAVE = Regex("https://arweave\\.net/([A-Za-z0-9_-]{43})"); const val MIRROR = "https://turbo-gateway.com/"; const val JSON_MAX = 12 * 1024 * 1024; const val THUMB_MAX = 3 * 1024 * 1024 }
+    private companion object { val ARWEAVE = Regex("https://arweave\\.net/([A-Za-z0-9_-]{43})"); const val MIRROR = "https://turbo-gateway.com/"; const val CACHE_MAX_FILES = 300; const val JSON_MAX = 12 * 1024 * 1024; const val THUMB_MAX = 3 * 1024 * 1024 }
 }

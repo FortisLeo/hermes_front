@@ -45,4 +45,11 @@ class OsaHttpCatalogTest {
     @Test fun nonArweaveUrlsGetNoMirror() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(500)); assertTrue(runCatching { catalog().download(server.url("/m").toString()) }.isFailure); assertEquals(1, server.requestCount)
     }
+    @Test fun thumbnailsComeFromDiskCacheOnSecondVisit() = runBlocking {
+        val dir = java.nio.file.Files.createTempDirectory("thumbs").toFile()
+        val c = OsaHttpCatalog(retryDelayMs = 1, guard = { null }, cacheDir = dir)
+        server.enqueue(MockResponse().setBody("img")); val u = server.url("/t").toString()
+        assertEquals(3, c.thumbnail(u)!!.size); assertEquals(3, OsaHttpCatalog(retryDelayMs = 1, guard = { null }, cacheDir = dir).thumbnail(u)!!.size); assertEquals(1, server.requestCount)
+        dir.deleteRecursively(); Unit
+    }
 }

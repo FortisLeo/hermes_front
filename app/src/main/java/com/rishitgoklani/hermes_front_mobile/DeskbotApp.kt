@@ -84,7 +84,7 @@ class AppContainer(private val app: Application) {
     val avatarDir: File get() = File(app.filesDir, "avatar")
     /** Changes whenever a new model is installed, so the viewer reloads. */
     val avatarModelVersion = kotlinx.coroutines.flow.MutableStateFlow(File(File(app.filesDir, "avatar"), "model.vrm").lastModified())
-    val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog()
+    val avatarCatalog = com.rishitgoklani.hermes_front_mobile.data.avatar.OsaHttpCatalog(cacheDir = File(app.cacheDir, "avatar-thumbs"))
     /** The one way a model becomes the avatar (license-checked by the installer): write atomically, turn the avatar on, reload the viewer. */
     val avatarInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarInstaller { bytes ->
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { avatarDir.mkdirs(); val tmp = File(avatarDir, "model.vrm.tmp"); tmp.writeBytes(bytes); check(tmp.renameTo(File(avatarDir, "model.vrm"))) { "could not save model" } }
