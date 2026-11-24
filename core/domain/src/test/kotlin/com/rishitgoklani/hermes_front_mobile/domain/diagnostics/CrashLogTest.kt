@@ -12,7 +12,7 @@ class CrashLogTest {
         val l = CrashLog(FakeCrashStore())
         l.record("main", IllegalStateException("boom"), "1.0 (debug)", 42L)
         val r = l.latest()!!
-        assertTrue(r.contains("time: 42")); assertTrue(r.contains("thread: main")); assertTrue(r.contains("app: 1.0 (debug)")); assertTrue(r.contains("IllegalStateException: boom"))
+        assertTrue(r.contains("time: 1970-01-01T00:00:00.042Z (epoch 42)")); assertTrue(r.contains("thread: main")); assertTrue(r.contains("app: 1.0 (debug)")); assertTrue(r.contains("IllegalStateException: boom"))
     }
 
     @Test fun redactsBearerTokensAndKeys() {

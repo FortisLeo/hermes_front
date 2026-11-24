@@ -49,7 +49,7 @@ class CrashLog(
         private fun split(text: String?): List<String> = if (text.isNullOrBlank()) emptyList() else text.split(SEPARATOR).filter { it.isNotBlank() }
 
         fun format(thread: String, error: Throwable, version: String, nowMillis: Long): String =
-            "time: $nowMillis\nthread: $thread\napp: $version\n" + error.stackTraceToString()
+            "time: ${java.time.Instant.ofEpochMilli(nowMillis)} (epoch $nowMillis)\nthread: $thread\napp: $version\n" + error.stackTraceToString()
 
         fun truncate(text: String, max: Int): String = if (text.length <= max) text else text.take(max) + "\n... (truncated ${text.length - max} chars)"
 
