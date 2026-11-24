@@ -31,7 +31,7 @@ Status first: `deskbot_package_info package=<pkg>` (version, enabled, permission
 `pm uninstall <pkg>` (user apps); system apps for user 0: `pm uninstall --user 0 <pkg>` (reversible with `cmd package install-existing <pkg>`); hide: `pm hide <pkg>`. Confirm with the user before removing anything they use.
 
 ### 86 Inventory installed apps
-`deskbot_app_list user_only=true`; sizes/last used: `dumpsys usagestats | grep -E "package=|totalTimeInForeground"`; install source `pm list packages -i | grep <pkg>`; sizes `dumpsys diskstats`.
+`deskbot_app_list user_only=true`; screen time per app: `deskbot_app_usage hours=24 limit=10`; sizes/last used: `dumpsys usagestats | grep -E "package=|totalTimeInForeground"`; install source `pm list packages -i | grep <pkg>`; sizes `dumpsys diskstats`.
 
 ### 87 Switch between apps
 Recents: `deskbot_ui_global recents` then `deskbot_ui_click` the card; bring to front `deskbot_app_open`; split screen: `am start -n <pkg>/<act> --windowingMode 3` (varies).

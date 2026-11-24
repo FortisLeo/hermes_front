@@ -31,7 +31,7 @@ In Chrome: menu > Translate (`deskbot_ui_click`); or fetch text (`web_extract`) 
 Clear data: Chrome menu > Settings > Privacy > Clear browsing data (`deskbot_ui_*`); or `pm clear com.android.chrome` (wipes everything; confirm). Default search engine in Chrome settings.
 
 ### 241 Send a message in an app
-WhatsApp: `am start -a android.intent.action.VIEW -d "https://wa.me/<number>?text=<urlencoded>"` then `deskbot_ui_click desc=Send`. Telegram: `tg://msg?text=...`. Other apps: open chat via search (#78), `deskbot_ui_type`, tap Send. Verify the message appears with `deskbot_ui_wait_for`. Confirm recipient + text with the user before sending.
+WhatsApp: `am start -a android.intent.action.VIEW -d "https://wa.me/<number>?text=<urlencoded>"` then `deskbot_ui_click desc=Send`. Telegram: `tg://msg?text=...`. Other apps: open chat via search (#78), `deskbot_ui_type`, tap Send. Verify the message appears with `deskbot_ui_wait_for`. Plain text messages (SMS): `deskbot_sms_read box=inbox|sent from=<number> limit=10` reads them; `deskbot_sms_send to=<number> text=... confirm=true` sends (costs money, cannot be undone: confirm recipient + text with the user first; without confirm=true the tool refuses). Confirm recipient + text with the user before sending.
 
 ### 242 Read and summarize chats
 Open the thread, `deskbot_ui_tree max_nodes=250` (messages are text nodes), scroll up with `deskbot_ui_swipe direction=down` to load more; summarize unread. Notification route: `deskbot_notifications_list app=WhatsApp`.
@@ -43,7 +43,7 @@ Record: long-press the mic button (`deskbot_ui_click long=true`), release by swi
 Open app, compose via UI, attach media from `/sdcard/Pictures`, **confirm text/image with the user before Post**. Scheduling: app's scheduler UI or Hermes cron to post later.
 
 ### 246 Start or join a call
-Voice/video in chat apps: open the chat and tap the call icon (`desc=Voice call`/`Video call`); hang up/mute by `deskbot_ui_click`. While in a call the bot stays silent (#333).
+Voice/video in chat apps: open the chat and tap the call icon (`desc=Voice call`/`Video call`); hang up/mute by `deskbot_ui_click`. Recent phone calls (incoming, outgoing, missed): `deskbot_call_log type=missed limit=10`. While in a call the bot stays silent (#333).
 
 ### 248 Media in chats
 Send photo: attach icon → Gallery → pick (`deskbot_ui_click`). Incoming image: `deskbot_screenshot` and describe with vision.

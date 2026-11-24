@@ -34,7 +34,7 @@ Time zone `cmd time_zone_detector set_time_zone_id <Area/City>` (fallback `servi
 `cmd role add-role-holder android.app.role.HOME <pkg> 0` (launcher); BROWSER, DIALER, SMS, ASSISTANT use the same `android.app.role.<NAME>`. List holders: `cmd role get-role-holders android.app.role.HOME`. Fallback UI: `am start -a android.settings.MANAGE_DEFAULT_APPS_SETTINGS`.
 
 ### 17 Do Not Disturb and focus modes
-`cmd notification set_dnd on|off|priority|alarms|none`; schedules via `cmd notification` rules or Settings UI. Verify with `settings get global zen_mode` (0 off, 1 priority, 2 none, 3 alarms).
+`deskbot_dnd mode=get|off|priority|alarms|silence` reads or sets it in one call. Shell fallback: `cmd notification set_dnd on|off|priority|alarms|none`; schedules via `cmd notification` rules or Settings UI. Verify with `settings get global zen_mode` (0 off, 1 priority, 2 none, 3 alarms).
 
 ### 18 Lock screen and security settings
 Lock timeout `settings put secure lock_screen_lock_after_timeout <ms>`; screen timeout `settings put system screen_off_timeout <ms>`; notifications on lock `settings put secure lock_screen_show_notifications 1|0`. Changing lock *type/PIN*: `cmd lock_settings set-pin <pin>` / `clear` only with the user's explicit confirmation (it can lock the owner out).
