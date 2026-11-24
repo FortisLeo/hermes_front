@@ -22,6 +22,7 @@ class LiveSettingsViewModel(private val repo: LiveSettingsRepository) : ViewMode
     fun onEnabled(v: Boolean) = change(persist = true) { it.copy(enabled = v) }
     fun onVoice(v: String) = change(persist = true) { it.copy(voice = v) }
     fun onHalfDuplex(v: Boolean) = change(persist = true) { it.copy(halfDuplex = v) }
+    fun onAllTools(v: Boolean) = change(persist = true) { it.copy(allTools = v) }
     fun onApiKey(v: String) = change(persist = false) { it.copy(apiKey = v) }
     fun onModel(v: String) = change(persist = false) { it.copy(model = v) }
     fun save() = change(persist = true) { it }

@@ -37,6 +37,8 @@ android {
         compose = true
         buildConfig = true
     }
+    // The Hermes skill guides ship inside the app so the Gemini live conversation can read the same recipes (hermes-skills/deskbot/<skill>/SKILL.md).
+    sourceSets.getByName("main").assets.srcDir(rootProject.layout.projectDirectory.dir("hermes-skills"))
 }
 
 dependencies {

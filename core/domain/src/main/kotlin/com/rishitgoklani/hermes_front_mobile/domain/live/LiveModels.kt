@@ -81,6 +81,8 @@ data class LiveSettings(
     /** Mute the mic while the bot talks, so its own voice cannot interrupt it (no echo cancellation needed). */
     val halfDuplex: Boolean = true,
     val idleSeconds: Int = 25,
+    /** Offer every phone tool and the skill guides (true) or only the essential tools (false: leaner, faster to set up). */
+    val allTools: Boolean = true,
 ) {
     val ready: Boolean get() = enabled && apiKey.isNotBlank()
     companion object { const val DEFAULT_MODEL = "gemini-3.8-live" }

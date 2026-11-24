@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class AudioTrackLiveOutput(scope: CoroutineScope) : LiveAudioOut, MouthSource {
     private val rate = 24_000
+    private companion object { const val STALL_MS = 1_500L }
     private val queue = Channel<ByteArray>(Channel.UNLIMITED)
     private val _playing = MutableStateFlow(false)
     override val playing: StateFlow<Boolean> = _playing
@@ -84,7 +85,13 @@ class AudioTrackLiveOutput(scope: CoroutineScope) : LiveAudioOut, MouthSource {
                 chunk = if (my == epoch) queue.tryReceive().getOrNull() else null
             }
             // Everything queued has been handed to the track; wait until it has actually sounded, then go quiet.
-            while (my == epoch && (t.playbackHeadPosition - baseHead) < writtenFrames) delay(20)
+            // If the track stops advancing (audio focus taken, device glitch) do not stay "playing" forever: that would keep the half-duplex mic muted for good.
+            var lastHead = -1; var stalledSince = 0L
+            while (my == epoch && (t.playbackHeadPosition - baseHead) < writtenFrames) {
+                val head = t.playbackHeadPosition; val now = System.nanoTime() / 1_000_000
+                if (head != lastHead) { lastHead = head; stalledSince = now } else if (now - stalledSince > STALL_MS) break
+                delay(20)
+            }
             if (my == epoch && queuedBytes.get() <= 0 && queue.isEmpty) { _level.value = 0f; _playing.value = false }
         }
     }

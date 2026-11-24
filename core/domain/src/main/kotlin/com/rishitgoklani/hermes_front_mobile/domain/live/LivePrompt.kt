@@ -2,11 +2,16 @@ package com.rishitgoklani.hermes_front_mobile.domain.live
 
 /** The system instruction for a live conversation: who the bot is, how it speaks, and when to use its tools. */
 object LivePrompt {
-    fun build(name: String = "Deskbot", tone: String = "", description: String = ""): String = buildString {
+    fun build(name: String = "Deskbot", tone: String = "", description: String = "", skills: List<SkillInfo> = emptyList()): String = buildString {
         append("You are $name, a small desk robot that lives in the user's Android phone. You talk with the user out loud, so keep replies short and natural: one or two sentences unless asked for more, no lists, no markdown, no emoji. ")
         append("You can act on the phone with your tools: use them whenever the user asks for something they can do (timers, volume, torch, apps, notes, battery, calendar, notifications) and then say briefly what you did. ")
         append("Use set_expression-style face tools only for emotion, never to narrate. If you need to see something, call look first, then answer from the image. ")
         append("Never read out ids, JSON or error codes; say the problem in plain words. When the user says goodbye or the conversation is clearly over, say a short goodbye and call end_conversation.")
+        if (skills.isNotEmpty()) {
+            append("\n\nSkills: for anything beyond a simple one-step request, call read_skill with the matching skill name first and follow its steps. The guides were written for another agent: where they name a tool with a `deskbot_` prefix, use the same tool without the prefix; where they say to run a terminal command, use the shell tool. Available skills:")
+            skills.forEach { append("\n- ").append(it.id).append(": ").append(it.description.trimEnd('.')) }
+            append("\n")
+        }
         if (description.isNotBlank()) append(" About you: ${description.trim()}")
         if (tone.isNotBlank()) append(" Your speaking style: ${tone.trim()}.")
     }

@@ -145,18 +145,23 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     val runVoiceTurn = RunVoiceTurn(AndroidSpeechToText(app), hermes, tts, camera, { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }, audit = audit)
     private val loop = ConversationLoop(VoskKeywordSpotter(modelStore), runVoiceTurn, tts, VoiceLoopConfig(),
         onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") })
+    private val skillSource = com.rishitgoklani.hermes_front_mobile.data.live.AssetSkillSource(app.assets)
     private val liveRun: com.rishitgoklani.hermes_front_mobile.domain.live.RunLiveSession by lazy {
         val guard = { if (kill.isActive()) "Kill switch active: reset it on the phone" else null }
-        val tools = com.rishitgoklani.hermes_front_mobile.domain.live.LiveToolBridge(capabilities, runCapability, com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.HOT_TOOLS, denied = guard)
+        val tools = com.rishitgoklani.hermes_front_mobile.domain.live.LiveToolBridge(capabilities, runCapability, com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.HOT_TOOLS,
+            local = listOf(com.rishitgoklani.hermes_front_mobile.domain.live.LiveSkillTool.create(skillSource)), denied = guard)
         com.rishitgoklani.hermes_front_mobile.domain.live.RunLiveSession(
             session = com.rishitgoklani.hermes_front_mobile.data.live.GeminiLiveClient(apiKey = { liveSettings.settings.first().apiKey }, log = apiLog),
             mic = com.rishitgoklani.hermes_front_mobile.data.live.AudioRecordLiveInput(), speaker = liveOut, tools = tools,
             settings = { liveSettings.settings.first() },
-            prompt = { val p = activePersona; com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.build(p?.name ?: "Deskbot", p?.tone.orEmpty(), p?.description.orEmpty()) },
+            prompt = { all -> val p = activePersona; com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.build(p?.name ?: "Deskbot", p?.tone.orEmpty(), p?.description.orEmpty(), if (all) skillSource.list() else emptyList()) },
             frame = { facing -> camera.capture(facing, 140_000) }, audit = audit, log = apiLog)
     }
     /** What the bottom-right wave shows: whether a live conversation runs and how loud the user is (the microphone only). */
     val liveActivity: com.rishitgoklani.hermes_front_mobile.domain.live.LiveActivity get() = liveRun
+    /** True when Gemini Live is switched on and has a key: the wave becomes a tap-to-talk button. */
+    val liveReady: StateFlow<Boolean> = liveSettings.settings.map { it.ready }.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
+    private var liveStartedByTap = false
     private val liveLoop = com.rishitgoklani.hermes_front_mobile.domain.voice.LiveConversationLoop(VoskKeywordSpotter(modelStore), { liveRun }, VoiceLoopConfig(),
         onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") },
         onError = { android.util.Log.w("DeskbotLive", "session failed: ${it.message}") })
@@ -221,6 +226,16 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
         notificationHistory = notificationHistory, notificationSource = notificationSource, poster = notificationPoster, extra = extras.capabilities, video = camera))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
+
+    /** The wave button: starts listening right away (no wake phrase) and keeps listening until tapped again; a second tap stops it. */
+    fun toggleLiveListening() {
+        if (liveRun.active.value) { liveLoop.requestStop(); return }
+        if (kill.isActive()) return
+        liveStartedByTap = !wake.enabled.value          // when the always-listening loop was off, tapping must not leave it running afterwards
+        if (!wake.enabled.value) wake.start(save = false)
+        liveLoop.requestStart()
+    }
+    init { scope.launch { liveRun.active.drop(1).collect { on -> if (!on && liveStartedByTap) { liveStartedByTap = false; wake.stop() } } } }
     val engine = RoutineEngine(routines, runCapability, audit = audit)
     val handleUiAction = com.rishitgoklani.hermes_front_mobile.domain.a2ui.HandleUiAction(a2ui, runCapability, hermes, tts)
     val statusProvider = com.rishitgoklani.hermes_front_mobile.ui.a2ui.StatusProvider { kind ->
@@ -250,7 +265,8 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
         com.rishitgoklani.hermes_front_mobile.domain.presence.ProactiveSuggestions(com.rishitgoklani.hermes_front_mobile.data.presence.AndroidUpcomingEvents(app), hour = ::hourNow),
         escalation, taskSupervisor,
         com.rishitgoklani.hermes_front_mobile.domain.presence.AmbientAwareness(com.rishitgoklani.hermes_front_mobile.data.presence.AndroidAmbientSense(app) {
-            runCatching { com.rishitgoklani.hermes_front_mobile.data.capabilities.soundLevelCapability().executor.execute(kotlinx.serialization.json.JsonObject(emptyMap())).data?.get("peak_dbfs")?.let { (it as kotlinx.serialization.json.JsonPrimitive).content.toDouble().toInt() } }.getOrNull()
+            // The microphone belongs to the live conversation while one runs; sampling it for room noise at the same time could interrupt the stream.
+            if (liveActivity.active.value) null else runCatching { com.rishitgoklani.hermes_front_mobile.data.capabilities.soundLevelCapability().executor.execute(kotlinx.serialization.json.JsonObject(emptyMap())).data?.get("peak_dbfs")?.let { (it as kotlinx.serialization.json.JsonPrimitive).content.toDouble().toInt() } }.getOrNull()
         }),
         com.rishitgoklani.hermes_front_mobile.domain.presence.RoutineLearning(com.rishitgoklani.hermes_front_mobile.data.presence.FileAuditSource(File(app.filesDir, "audit.log")), hour = ::hourNow, utcOffsetMs = { java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()).toLong() }),
     ))

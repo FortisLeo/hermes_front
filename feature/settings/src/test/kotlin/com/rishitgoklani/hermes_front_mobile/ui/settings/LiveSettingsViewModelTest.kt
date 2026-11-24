@@ -45,4 +45,10 @@ class LiveSettingsViewModelTest {
     @Test fun readyNeedsBothTheSwitchAndAKey() {
         assertFalse(LiveSettings(enabled = true, apiKey = " ").ready); assertFalse(LiveSettings(enabled = false, apiKey = "k").ready); assertTrue(LiveSettings(enabled = true, apiKey = "k").ready)
     }
+
+    @Test fun allToolsIsOnByDefaultAndTheSwitchPersistsImmediately() = runBlocking {
+        val repo = FakeLiveSettings(LiveSettings()); val vm = LiveSettingsViewModel(repo)
+        assertTrue(vm.state.value.settings.allTools)
+        vm.onAllTools(false); assertFalse(repo.settings.first().allTools)
+    }
 }

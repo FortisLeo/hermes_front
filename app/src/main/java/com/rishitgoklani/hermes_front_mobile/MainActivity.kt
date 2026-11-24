@@ -240,7 +240,7 @@ class MainActivity : ComponentActivity() {
                                         LaunchedEffect(lib.message) { if (lib.message != null && !lib.messageIsError) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
                                         com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, onUse = { slot -> library.use(slot); section = null }, onRetry = library::retry, onRemove = library::removeAvatar, onUpload = { pickVrm.launch(arrayOf("*/*")) },
                                             onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail, onDismissMessage = library::consumeMessage) }
-                                    Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); val liveSt by liveSettings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save, onDisplayQuality = settings::onDisplayQuality, onShowIntro = { section = null; onboarding.replay() }, live = liveSt, liveActions = com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsActions(liveSettings::onEnabled, liveSettings::onApiKey, liveSettings::onModel, liveSettings::onVoice, liveSettings::onHalfDuplex, liveSettings::save)) }
+                                    Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); val liveSt by liveSettings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save, onDisplayQuality = settings::onDisplayQuality, onShowIntro = { section = null; onboarding.replay() }, live = liveSt, liveActions = com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsActions(liveSettings::onEnabled, liveSettings::onApiKey, liveSettings::onModel, liveSettings::onVoice, liveSettings::onHalfDuplex, liveSettings::save, liveSettings::onAllTools)) }
                                 }
                             }
                         }
@@ -249,7 +249,9 @@ class MainActivity : ComponentActivity() {
                 // Voice indicator (bottom right): a wave of the USER's microphone while a live conversation runs (never the speaker). Debug builds can preview it with --ez wave_demo true.
                 val waveDemo = androidx.compose.runtime.remember { if (BuildConfig.DEBUG && intent?.getBooleanExtra("wave_demo", false) == true) com.rishitgoklani.hermes_front_mobile.ui.voice.WaveDemo(scope) else null }
                 com.rishitgoklani.hermes_front_mobile.ui.voice.LiveWave(
-                    waveDemo?.active ?: container.liveActivity.active, waveDemo?.mic ?: container.liveActivity.micLevel,
+                    available = waveDemo?.active ?: container.liveReady, active = waveDemo?.active ?: container.liveActivity.active,
+                    mic = waveDemo?.mic ?: container.liveActivity.micLevel, notice = waveDemo?.notice ?: container.liveActivity.notice,
+                    onToggle = { if (waveDemo == null) container.toggleLiveListening() },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 64.dp))
             }
         }

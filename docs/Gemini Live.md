@@ -14,6 +14,14 @@ wake word (Vosk) releases the mic -> `RunLiveSession` opens `GeminiLiveClient` -
 | `AudioRecordLiveInput`, `AudioTrackLiveOutput`, `LiveSettingsStore` | `:core:data` (`data/live`) |
 | Settings section | `:feature:settings` (`LiveSettingsViewModel`) |
 
+## Tools and skills
+Gemini gets everything Hermes has on the phone side.
+- **All phone tools.** Every bridge tool (156 today) is declared, except `tts_say` (it would speak over the model's own voice). The declarations come to about 12k tokens. Settings > "All phone tools and skills" can switch to a lean set of about 35 (`LivePrompt.HOT_TOOLS`) if setup or first reply ever feels slow.
+- **Free-form parameters.** The server rejects empty object schemas, so 14 free-form parameters (HTTP headers, avatar bones, intent extras, `ui_show` screens, routine definitions, ...) are declared as JSON strings and parsed back into objects before the tool runs (`LiveToolBridge.prepare`). `RealToolSchemasTest` checks a snapshot of the phone's real tool list (`core/domain/src/test/resources/bridge-tools.json`) against the server's rules; refresh the snapshot when tools are added.
+- **Skills.** The 30 Hermes skill guides (`hermes-skills/deskbot/<skill>/SKILL.md`) are packaged as app assets. The system prompt lists them (id and one line) and the built-in `read_skill` tool returns a full guide on demand, so only the guides in use cost tokens. The prompt tells the model to drop the `deskbot_` prefix from tool names and to use the `shell` tool where a guide says "terminal".
+- **Safety.** Every call still goes through the kill switch and the same deny-lists as Hermes' calls (the shell tool keeps its guard). Only declared tools run.
+- **Not available.** Hermes-only abilities: its memory, scheduled jobs, MCP tools and its own web tools. Gemini's Google Search is not switched on.
+
 ## Decisions
 - **Tools.** Only a hot set (`LivePrompt.HOT_TOOLS`, ~35) is declared; every declaration costs prompt tokens each turn. `end_conversation` and `look` are built in. Calls obey the kill switch.
 - **Vision.** No continuous video (sessions with video are capped at 2 minutes). The model calls `look` (front or back camera) and one JPEG is sent.

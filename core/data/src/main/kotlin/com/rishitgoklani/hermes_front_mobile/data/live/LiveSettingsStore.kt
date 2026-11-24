@@ -21,16 +21,17 @@ class LiveSettingsStore(private val context: Context) : LiveSettingsRepository {
     private val voice = stringPreferencesKey("voice")
     private val half = booleanPreferencesKey("half_duplex")
     private val idle = intPreferencesKey("idle_seconds")
+    private val all = booleanPreferencesKey("all_tools")
 
     override val settings: Flow<LiveSettings> = context.liveStore.data.map {
         val d = LiveSettings()
-        LiveSettings(it[enabled] ?: d.enabled, it[key] ?: d.apiKey, it[model]?.ifBlank { null } ?: d.model, it[voice]?.ifBlank { null } ?: d.voice, it[half] ?: d.halfDuplex, (it[idle] ?: d.idleSeconds).coerceIn(5, 300))
+        LiveSettings(it[enabled] ?: d.enabled, it[key] ?: d.apiKey, it[model]?.ifBlank { null } ?: d.model, it[voice]?.ifBlank { null } ?: d.voice, it[half] ?: d.halfDuplex, (it[idle] ?: d.idleSeconds).coerceIn(5, 300), it[all] ?: d.allTools)
     }
 
     override suspend fun save(settings: LiveSettings) {
         context.liveStore.edit {
             it[enabled] = settings.enabled; it[key] = settings.apiKey.trim(); it[model] = settings.model.trim(); it[voice] = settings.voice.trim()
-            it[half] = settings.halfDuplex; it[idle] = settings.idleSeconds.coerceIn(5, 300)
+            it[half] = settings.halfDuplex; it[idle] = settings.idleSeconds.coerceIn(5, 300); it[all] = settings.allTools
         }
     }
 }

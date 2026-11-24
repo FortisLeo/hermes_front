@@ -33,15 +33,16 @@ private inline fun <reified T : Throwable> failsWith(block: () -> Unit): T { try
 @OptIn(ExperimentalCoroutinesApi::class)
 class RunLiveSessionTest {
     private class Rig(val scope: TestScope, val settings: LiveSettings = LiveSettings(enabled = true, apiKey = "k", idleSeconds = 25), denied: () -> String? = { null }, camera: Boolean = true) {
-        val session = FakeLiveSession(); val mic = FakeLiveAudioIn(); val speaker = FakeLiveAudioOut()
+        val session = FakeLiveSession(); val mic = FakeLiveAudioIn(); val speaker = FakeLiveAudioOut(); val audit = com.rishitgoklani.hermes_front_mobile.testing.FakeAuditLog()
         private val registry = CapabilityRegistry(listOf(Capability("battery", "Battery", executor = { ActionResult.completed("85 percent") })))
         val tools = LiveToolBridge(registry, RunCapability(registry), setOf("battery"), denied = denied)
         val events = mutableListOf<VoiceEvent>()
         private val shot: suspend (CameraFacing) -> ByteArray = { f -> byteArrayOf((if (f == CameraFacing.Back) 9 else 1).toByte()) }
         val run = RunLiveSession(session, mic, speaker, tools, { settings }, { "be brief" },
-            frame = if (camera) shot else null, clock = { scope.testScheduler.currentTime }, halfDuplexTailMs = 350)
+            frame = if (camera) shot else null, clock = { scope.testScheduler.currentTime }, audit = audit, halfDuplexTailMs = 350)
         lateinit var job: Job
-        fun start() { job = scope.backgroundScope.launch { run().collect { events += it } }; scope.testScheduler.runCurrent() }
+        var failure: Throwable? = null
+        fun start(keepAlive: Boolean = false) { job = scope.backgroundScope.launch { try { run(keepAlive).collect { events += it } } catch (e: java.io.IOException) { failure = e } }; scope.testScheduler.runCurrent() }
         val states get() = events.filterIsInstance<VoiceEvent.State>().map { it.state }
     }
 
@@ -139,22 +140,81 @@ class RunLiveSessionTest {
 
     @Test fun reconnectsWithTheResumptionHandleWhenTheServerClosesCleanly() = runTest {
         val r = Rig(this).also { it.start() }
-        r.session.emit(LiveEvent.Resumable("h1"), LiveEvent.Closed("goaway", error = false)); runCurrent()
+        r.session.emit(LiveEvent.Resumable("h1"), LiveEvent.Closed("goaway", error = false)); runCurrent(); advanceTimeBy(1_000); runCurrent()
         assertEquals(listOf(null, "h1"), r.session.opened.map { it.resumeHandle })
         assertTrue(r.job.isActive)
     }
 
-    @Test fun closeWithoutAHandleEndsTheConversation() = runTest {
-        val r = Rig(this).also { it.start() }
-        r.session.emit(LiveEvent.Closed("bye", error = false)); runCurrent(); advanceTimeBy(3_000); runCurrent()
-        assertTrue(r.job.isCompleted)
+    private suspend fun TestScope.drop(r: Rig, reason: String = "server went away", error: Boolean = false) {
+        r.session.emit(LiveEvent.Closed(reason, error)); runCurrent(); advanceTimeBy(5_000); runCurrent()
     }
 
-    @Test fun aServerErrorSurfacesAsAnException() = runTest {
-        val rig = Rig(this); var caught: Throwable? = null
-        val j = backgroundScope.launch { try { rig.run().toList() } catch (e: IOException) { caught = e } }
-        runCurrent(); rig.session.emit(LiveEvent.Closed("quota", error = true)); runCurrent(); advanceTimeBy(3_000); runCurrent()
-        assertEquals("quota", caught?.message); assertTrue(j.isCompleted)
+    @Test fun aCloseWithoutAHandleStartsAFreshSessionInsteadOfEndingTheConversation() = runTest {
+        val r = Rig(this).also { it.start() }
+        drop(r)
+        assertEquals(listOf<String?>(null, null), r.session.opened.map { it.resumeHandle })
+        assertTrue(r.job.isActive); assertEquals("Connection dropped, starting a new session…", r.run.notice.value!!.text)
+    }
+
+    @Test fun itGivesUpOnceTheReconnectBudgetIsSpentAndRecordsWhy() = runTest {
+        val r = Rig(this).also { it.start() }
+        repeat(5) { drop(r) }
+        assertTrue(r.job.isCompleted); assertEquals(5, r.session.opened.size) // the first open plus four retries
+        assertTrue("server closed: server went away" in r.audit.entries.single().second)
+    }
+
+    @Test fun aLongHealthyStretchEarnsAFreshReconnectBudget() = runTest {
+        val r = Rig(this, LiveSettings(enabled = true, apiKey = "k", idleSeconds = 300)).also { it.start() }
+        repeat(4) { drop(r) }
+        assertEquals(5, r.session.opened.size)
+        advanceTimeBy(61_000); runCurrent()
+        drop(r)
+        assertTrue(r.job.isActive); assertEquals(6, r.session.opened.size)
+    }
+
+    @Test fun anErrorCloseBeyondTheBudgetSurfacesTheServersReasonToo() = runTest {
+        val r = Rig(this).also { it.start() }
+        repeat(5) { drop(r, "quota exceeded", error = true) }
+        assertEquals("quota exceeded", r.failure?.message); assertEquals("Stopped: quota exceeded", r.run.notice.value!!.text)
+        assertEquals("failed", r.audit.entries.single().third)
+    }
+
+    @Test fun aMicrophoneTakenAwayBrieflyIsReopenedAndTheConversationContinues() = runTest {
+        val r = Rig(this).also { it.mic.failures = 2; it.start() }
+        assertEquals("Microphone interrupted, reconnecting…", r.run.notice.value!!.text)
+        advanceTimeBy(1_500); runCurrent()
+        assertEquals(3, r.mic.opens); assertTrue(r.job.isActive)
+    }
+
+    @Test fun aMicrophoneThatNeverComesBackEndsTheSessionWithAClearError() = runTest {
+        val r = Rig(this).also { it.mic.failures = 99; it.start() }
+        advanceTimeBy(20_000); runCurrent()
+        assertTrue(r.job.isCompleted); assertTrue(r.failure!!.message!!.startsWith("microphone unavailable"))
+    }
+
+    @Test fun silenceEndsAWakeWordConversationAndTellsTheUser() = runTest {
+        val r = Rig(this).also { it.start() }
+        advanceTimeBy(26_000); runCurrent()
+        assertTrue(r.job.isCompleted)
+        assertTrue("Stopped listening after 25 s" in r.run.notice.value!!.text); assertTrue("idle" in r.audit.entries.single().second)
+    }
+
+    @Test fun aConversationStartedByTapStaysOpenThroughSilence() = runTest {
+        val r = Rig(this).also { it.start(keepAlive = true) }
+        advanceTimeBy(10 * 60_000L); runCurrent()
+        assertTrue(r.job.isActive)
+    }
+
+    @Test fun goodbyeIsRecordedAsTheReason() = runTest {
+        val r = Rig(this).also { it.start() }
+        r.session.emit(call("e1", "end_conversation", none)); runCurrent(); r.session.emit(LiveEvent.TurnComplete); runCurrent(); advanceTimeBy(3_000); runCurrent()
+        assertTrue("goodbye" in r.audit.entries.single().second)
+    }
+
+    @Test fun beingStoppedIsRecordedAsCancelled() = runTest {
+        val r = Rig(this).also { it.start() }
+        r.job.cancel(); runCurrent()
+        assertTrue("cancelled" in r.audit.entries.single().second)
     }
 
     @Test fun refusesToStartWithoutAnApiKey() = runTest {
@@ -209,8 +269,9 @@ class RunLiveSessionActivityTest {
     @Test fun activeOnlyWhileTheConversationRuns() = runTest {
         val r = Rig(this); assertTrue(!r.run.active.value)
         r.start(this); assertTrue(r.run.active.value)
-        r.session.emit(LiveEvent.Closed("bye", error = false)); runCurrent(); advanceTimeBy(3_000); runCurrent()
+        r.job.cancel(); runCurrent()
         assertTrue(!r.run.active.value); assertEquals(0f, r.run.micLevel.value, 0f)
+        assertTrue("cancelling must also close the socket", r.session.closes >= 1)
     }
 
     @Test fun micLevelFollowsHowLoudTheUserIs() = runTest {
@@ -224,5 +285,29 @@ class RunLiveSessionActivityTest {
         r.mic.mic.emit(pcm(6000)); runCurrent(); assertTrue(r.run.micLevel.value > 0.5f)
         r.speaker.setPlaying(true); r.mic.mic.emit(pcm(6000)); runCurrent()
         assertEquals(0f, r.run.micLevel.value, 0f)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class RunLiveSessionToolScopeTest {
+    private fun rig(scope: TestScope, all: Boolean, promptSeen: MutableList<Boolean>): FakeLiveSession {
+        val session = FakeLiveSession()
+        val registry = CapabilityRegistry(listOf(Capability("battery", "b", executor = { ActionResult.completed("ok") }), Capability("torch", "t", executor = { ActionResult.completed("ok") })))
+        val run = RunLiveSession(session, FakeLiveAudioIn(), FakeLiveAudioOut(), LiveToolBridge(registry, RunCapability(registry), setOf("battery")), { LiveSettings(enabled = true, apiKey = "k", allTools = all) },
+            { a -> promptSeen += a; "p" }, clock = { scope.testScheduler.currentTime })
+        scope.backgroundScope.launch { run().collect { } }; scope.testScheduler.runCurrent()
+        return session
+    }
+
+    @Test fun withAllToolsOnEveryToolIsDeclaredAndThePromptKnowsSkillsAreOn() = runTest {
+        val seen = mutableListOf<Boolean>(); val s = rig(this, true, seen)
+        assertEquals(setOf("battery", "torch", "end_conversation", "look").minus("look"), s.opened.single().tools.map { it.name }.toSet())
+        assertEquals(listOf(true), seen)
+    }
+
+    @Test fun inLeanModeOnlyTheEssentialToolsAreDeclared() = runTest {
+        val seen = mutableListOf<Boolean>(); val s = rig(this, false, seen)
+        assertEquals(setOf("battery", "end_conversation"), s.opened.single().tools.map { it.name }.toSet())
+        assertEquals(listOf(false), seen)
     }
 }

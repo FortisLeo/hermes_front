@@ -1,0 +1,2978 @@
+{
+"tools": [
+{
+"description": "The phone's current local date, time, weekday, time zone and part of day. Use for anything relative to now (reminders, 'tonight', schedules).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "time_now"
+},
+{
+"description": "Speak the given text aloud on the phone using the bot's voice.",
+"inputSchema": {
+"properties": {
+"text": {
+"description": "What to say",
+"type": "string"
+}
+},
+"required": [
+"text"
+],
+"type": "object"
+},
+"name": "tts_say"
+},
+{
+"description": "Report battery percent, charging state and temperature.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "battery"
+},
+{
+"description": "Open an installed app by name or package.",
+"inputSchema": {
+"properties": {
+"name": {
+"description": "App label or package name",
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "app_open"
+},
+{
+"description": "Phone model, Android version and CPU architecture.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "device_info"
+},
+{
+"description": "Take a photo with the phone camera and return it as a base64 JPEG in data.image_base64. Use for 'what is this' / 'look at' questions.",
+"inputSchema": {
+"properties": {
+"facing": {
+"description": "Default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "camera_capture"
+},
+{
+"description": "Get or set media volume as a percent (0-100). Omit level to just read it.",
+"inputSchema": {
+"properties": {
+"level": {
+"maximum": 100,
+"minimum": 0,
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "volume"
+},
+{
+"description": "Get or set screen brightness as a percent (0-100). Omit level to just read it.",
+"inputSchema": {
+"properties": {
+"level": {
+"maximum": 100,
+"minimum": 0,
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "brightness"
+},
+{
+"description": "Turn the flashlight on or off.",
+"inputSchema": {
+"properties": {
+"on": {
+"type": "boolean"
+}
+},
+"required": [
+"on"
+],
+"type": "object"
+},
+"name": "torch"
+},
+{
+"description": "Dump the current screen as compact lines (label, id, centre coords, click/edit/scroll flags). Use before ui_click.",
+"inputSchema": {
+"properties": {
+"max_nodes": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "ui_tree"
+},
+{
+"description": "Tap an element found by text/id/desc (preferred), or tap raw x,y. Set long=true for long press.",
+"inputSchema": {
+"properties": {
+"desc": {
+"type": "string"
+},
+"exact": {
+"type": "boolean"
+},
+"id": {
+"description": "resource id suffix",
+"type": "string"
+},
+"index": {
+"type": "integer"
+},
+"long": {
+"type": "boolean"
+},
+"text": {
+"type": "string"
+},
+"x": {
+"type": "integer"
+},
+"y": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "ui_click"
+},
+{
+"description": "Swipe by direction (scrolls content the opposite way) or explicit coordinates.",
+"inputSchema": {
+"properties": {
+"direction": {
+"enum": [
+"up",
+"down",
+"left",
+"right"
+],
+"type": "string"
+},
+"duration_ms": {
+"type": "integer"
+},
+"x1": {
+"type": "integer"
+},
+"x2": {
+"type": "integer"
+},
+"y1": {
+"type": "integer"
+},
+"y2": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "ui_swipe"
+},
+{
+"description": "Two-finger pinch/zoom around x,y: scale>1 zooms in, <1 zooms out (default centre of screen).",
+"inputSchema": {
+"properties": {
+"scale": {
+"type": "number"
+},
+"span": {
+"type": "integer"
+},
+"x": {
+"type": "integer"
+},
+"y": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "ui_pinch"
+},
+{
+"description": "Long-press at x1,y1 then drag to x2,y2 (drag-and-drop, reorder).",
+"inputSchema": {
+"properties": {
+"x1": {
+"type": "integer"
+},
+"x2": {
+"type": "integer"
+},
+"y1": {
+"type": "integer"
+},
+"y2": {
+"type": "integer"
+}
+},
+"required": [
+"x1",
+"y1",
+"x2",
+"y2"
+],
+"type": "object"
+},
+"name": "ui_drag"
+},
+{
+"description": "Type text into the focused input field (replaces its content).",
+"inputSchema": {
+"properties": {
+"text": {
+"type": "string"
+}
+},
+"required": [
+"text"
+],
+"type": "object"
+},
+"name": "ui_type"
+},
+{
+"description": "System navigation: back, home, recents, notifications, quick_settings, lock, power_dialog.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"back",
+"home",
+"recents",
+"notifications",
+"quick_settings",
+"lock",
+"power_dialog"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "ui_global"
+},
+{
+"description": "Wait until text appears on screen (or gone=true: disappears). Returns when found or after timeout_ms (default 8000).",
+"inputSchema": {
+"properties": {
+"gone": {
+"type": "boolean"
+},
+"text": {
+"type": "string"
+},
+"timeout_ms": {
+"type": "integer"
+}
+},
+"required": [
+"text"
+],
+"type": "object"
+},
+"name": "ui_wait_for"
+},
+{
+"description": "Foreground app package, whether a keyboard looks open, and screen size.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "screen_state"
+},
+{
+"description": "Capture the screen as base64 JPEG (data.image_base64).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "screenshot"
+},
+{
+"description": "Read a system/global/secure setting by key.",
+"inputSchema": {
+"properties": {
+"key": {
+"type": "string"
+},
+"table": {
+"enum": [
+"system",
+"global",
+"secure"
+],
+"type": "string"
+}
+},
+"required": [
+"table",
+"key"
+],
+"type": "object"
+},
+"name": "settings_get"
+},
+{
+"description": "Write a setting and read it back to verify. Some provisioning keys are refused.",
+"inputSchema": {
+"properties": {
+"key": {
+"type": "string"
+},
+"table": {
+"enum": [
+"system",
+"global",
+"secure"
+],
+"type": "string"
+},
+"value": {
+"type": "string"
+}
+},
+"required": [
+"table",
+"key",
+"value"
+],
+"type": "object"
+},
+"name": "settings_put"
+},
+{
+"description": "List installed apps: label, package, version; filter by text; user_only (default true) hides system apps.",
+"inputSchema": {
+"properties": {
+"limit": {
+"type": "integer"
+},
+"query": {
+"type": "string"
+},
+"user_only": {
+"type": "boolean"
+}
+},
+"type": "object"
+},
+"name": "app_list"
+},
+{
+"description": "Details for one package: version, install/update time, size of code, enabled state, permissions granted.",
+"inputSchema": {
+"properties": {
+"package": {
+"type": "string"
+}
+},
+"required": [
+"package"
+],
+"type": "object"
+},
+"name": "app_info"
+},
+{
+"description": "Kill an app's background processes (soft stop). Use shell `am force-stop` for a hard stop.",
+"inputSchema": {
+"properties": {
+"package": {
+"type": "string"
+}
+},
+"required": [
+"package"
+],
+"type": "object"
+},
+"name": "app_stop"
+},
+{
+"description": "Read the clipboard text (Android may block background reads; works while the app/accessibility is active).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "clipboard_get"
+},
+{
+"description": "Put text on the clipboard.",
+"inputSchema": {
+"properties": {
+"text": {
+"type": "string"
+}
+},
+"required": [
+"text"
+],
+"type": "object"
+},
+"name": "clipboard_set"
+},
+{
+"description": "Clear the clipboard (hygiene).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "clipboard_clear"
+},
+{
+"description": "List available sensors (names usable with sensor_read).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "sensor_list"
+},
+{
+"description": "Read one sample from a sensor (accelerometer, gyroscope, light, proximity, pressure, magnetometer, gravity, humidity, temperature, step_counter).",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "sensor_read"
+},
+{
+"description": "Current location (lat, lon, accuracy). Uses last known if a fresh fix is not quickly available.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "location_get"
+},
+{
+"description": "Connectivity: transport, Wi-Fi SSID/RSSI/IP, Bluetooth on/off, metered flag.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "network_info"
+},
+{
+"description": "Control playback in whichever app is playing: play_pause, play, pause, next, previous, stop, rewind, forward.",
+"inputSchema": {
+"properties": {
+"action": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "media_key"
+},
+{
+"description": "Get/set volume percent for a stream: music, ring, alarm, notification, system, call. mute=true/false toggles mute.",
+"inputSchema": {
+"properties": {
+"level": {
+"type": "integer"
+},
+"mute": {
+"type": "boolean"
+},
+"stream": {
+"type": "string"
+}
+},
+"required": [
+"stream"
+],
+"type": "object"
+},
+"name": "stream_volume"
+},
+{
+"description": "Mute or unmute the microphone (mute=true/false).",
+"inputSchema": {
+"properties": {
+"mute": {
+"type": "boolean"
+}
+},
+"required": [
+"mute"
+],
+"type": "object"
+},
+"name": "mic_mute"
+},
+{
+"description": "Vibrate for duration_ms (default 200) or a pattern like [0,100,50,100].",
+"inputSchema": {
+"properties": {
+"duration_ms": {
+"type": "integer"
+},
+"pattern": {
+"items": {
+"type": "integer"
+},
+"type": "array"
+}
+},
+"type": "object"
+},
+"name": "vibrate"
+},
+{
+"description": "Set a clock alarm at hour:minute (24h) with optional label and repeat days (1=Sun..7=Sat).",
+"inputSchema": {
+"properties": {
+"days": {
+"items": {
+"type": "integer"
+},
+"type": "array"
+},
+"hour": {
+"type": "integer"
+},
+"label": {
+"type": "string"
+},
+"minute": {
+"type": "integer"
+}
+},
+"required": [
+"hour",
+"minute"
+],
+"type": "object"
+},
+"name": "alarm_set"
+},
+{
+"description": "Show a caption over any app (click-through). duration_ms 0 = until overlay_clear.",
+"inputSchema": {
+"properties": {
+"duration_ms": {
+"type": "integer"
+},
+"position": {
+"enum": [
+"top",
+"bottom"
+],
+"type": "string"
+},
+"text": {
+"type": "string"
+}
+},
+"required": [
+"text"
+],
+"type": "object"
+},
+"name": "overlay_text"
+},
+{
+"description": "Dim the screen with a dark overlay (percent 0-90; 0 removes). Optional tint hex like 'FF8800' for a warm night filter.",
+"inputSchema": {
+"properties": {
+"percent": {
+"type": "integer"
+},
+"tint": {
+"type": "string"
+}
+},
+"required": [
+"percent"
+],
+"type": "object"
+},
+"name": "screen_dim"
+},
+{
+"description": "Remove all Deskbot overlays.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "overlay_clear"
+},
+{
+"description": "Draw a highlight box on screen around the element matching text/desc, or around x,y,w,h, for duration_ms (default 4000) to guide the user.",
+"inputSchema": {
+"properties": {
+"desc": {
+"type": "string"
+},
+"duration_ms": {
+"type": "integer"
+},
+"h": {
+"type": "integer"
+},
+"text": {
+"type": "string"
+},
+"w": {
+"type": "integer"
+},
+"x": {
+"type": "integer"
+},
+"y": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "overlay_highlight"
+},
+{
+"description": "Shrink the Deskbot face into a picture-in-picture window that floats above other apps (leave it by tapping it).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "pip_face"
+},
+{
+"description": "Draw annotations over any app for duration_ms (default 5000, max 30000): shapes = [{type: circle|rect|line|arrow|text, x, y, r|w,h|x2,y2|text, color #RRGGBB}].",
+"inputSchema": {
+"properties": {
+"duration_ms": {
+"type": "integer"
+},
+"shapes": {
+"items": {
+"type": "object"
+},
+"type": "array"
+}
+},
+"required": [
+"shapes"
+],
+"type": "object"
+},
+"name": "overlay_draw"
+},
+{
+"description": "Floating bot face over other apps (action=on|off|status). Drag to move, tap to open the app.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"on",
+"off",
+"status"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "face_bubble"
+},
+{
+"description": "List calendar events from now for `days` days (default 1).",
+"inputSchema": {
+"properties": {
+"days": {
+"type": "integer"
+},
+"from_ms": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "calendar_events"
+},
+{
+"description": "Create an event in the first writable calendar.",
+"inputSchema": {
+"properties": {
+"duration_min": {
+"type": "integer"
+},
+"location": {
+"type": "string"
+},
+"start_ms": {
+"type": "integer"
+},
+"title": {
+"type": "string"
+}
+},
+"required": [
+"title",
+"start_ms"
+],
+"type": "object"
+},
+"name": "calendar_add_event"
+},
+{
+"description": "Search contacts by name or number.",
+"inputSchema": {
+"properties": {
+"limit": {
+"type": "integer"
+},
+"query": {
+"type": "string"
+}
+},
+"required": [
+"query"
+],
+"type": "object"
+},
+"name": "contacts_search"
+},
+{
+"description": "Add a contact with name and optional phone/email.",
+"inputSchema": {
+"properties": {
+"email": {
+"type": "string"
+},
+"name": {
+"type": "string"
+},
+"phone": {
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "contacts_add"
+},
+{
+"description": "Read recent text messages (inbox by default, box=sent for sent). Optional `from` filter and `limit` (default 10).",
+"inputSchema": {
+"properties": {
+"box": {
+"enum": [
+"inbox",
+"sent"
+],
+"type": "string"
+},
+"from": {
+"type": "string"
+},
+"limit": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "sms_read"
+},
+{
+"description": "Send a text message. Costs money and cannot be undone: ask the user first, then pass confirm=true.",
+"inputSchema": {
+"properties": {
+"confirm": {
+"type": "boolean"
+},
+"text": {
+"type": "string"
+},
+"to": {
+"type": "string"
+}
+},
+"required": [
+"to",
+"text",
+"confirm"
+],
+"type": "object"
+},
+"name": "sms_send"
+},
+{
+"description": "Recent calls (incoming, outgoing, missed) with `limit` (default 10) and optional `type` filter.",
+"inputSchema": {
+"properties": {
+"limit": {
+"type": "integer"
+},
+"type": {
+"enum": [
+"incoming",
+"outgoing",
+"missed"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "call_log"
+},
+{
+"description": "Delete contacts whose display name equals `name` exactly. Needs confirm=true.",
+"inputSchema": {
+"properties": {
+"confirm": {
+"type": "boolean"
+},
+"name": {
+"type": "string"
+}
+},
+"required": [
+"name",
+"confirm"
+],
+"type": "object"
+},
+"name": "contacts_delete"
+},
+{
+"description": "Delete the calendar event with id `event_id` (ids come from calendar_events). Needs confirm=true.",
+"inputSchema": {
+"properties": {
+"confirm": {
+"type": "boolean"
+},
+"event_id": {
+"type": "integer"
+}
+},
+"required": [
+"event_id",
+"confirm"
+],
+"type": "object"
+},
+"name": "calendar_delete_event"
+},
+{
+"description": "Get or set Do Not Disturb. mode: get | off | priority | alarms | silence.",
+"inputSchema": {
+"properties": {
+"mode": {
+"enum": [
+"get",
+"off",
+"priority",
+"alarms",
+"silence"
+],
+"type": "string"
+}
+},
+"required": [
+"mode"
+],
+"type": "object"
+},
+"name": "dnd"
+},
+{
+"description": "Screen time per app for the last `hours` (default 24), top `limit` (default 10).",
+"inputSchema": {
+"properties": {
+"hours": {
+"type": "integer"
+},
+"limit": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "app_usage"
+},
+{
+"description": "One-call device health: memory, storage, uptime, thermal, cpu, kernel. `sections` is a list (default memory, storage, uptime, thermal).",
+"inputSchema": {
+"properties": {
+"sections": {
+"items": {
+"enum": [
+"memory",
+"storage",
+"uptime",
+"thermal",
+"cpu",
+"kernel"
+],
+"type": "string"
+},
+"type": "array"
+}
+},
+"type": "object"
+},
+"name": "system_report"
+},
+{
+"description": "App status in one call: installed, version, enabled, granted permission count, standby bucket.",
+"inputSchema": {
+"properties": {
+"package": {
+"type": "string"
+}
+},
+"required": [
+"package"
+],
+"type": "object"
+},
+"name": "package_info"
+},
+{
+"description": "Recent logs. kind: crash | errors | recent | kernel. `lines` up to 100 (default 20).",
+"inputSchema": {
+"properties": {
+"kind": {
+"enum": [
+"crash",
+"errors",
+"recent",
+"kernel"
+],
+"type": "string"
+},
+"lines": {
+"type": "integer"
+}
+},
+"required": [
+"kind"
+],
+"type": "object"
+},
+"name": "device_logs"
+},
+{
+"description": "Read or switch a radio. name: wifi | bluetooth | mobile_data | airplane; state: get | on | off.",
+"inputSchema": {
+"properties": {
+"name": {
+"enum": [
+"wifi",
+"bluetooth",
+"mobile_data",
+"airplane"
+],
+"type": "string"
+},
+"state": {
+"enum": [
+"get",
+"on",
+"off"
+],
+"type": "string"
+}
+},
+"required": [
+"name",
+"state"
+],
+"type": "object"
+},
+"name": "radio"
+},
+{
+"description": "List a folder (name, size, is_dir).",
+"inputSchema": {
+"properties": {
+"path": {
+"type": "string"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "file_list"
+},
+{
+"description": "Read a text file (first 64 KB; use offset for more).",
+"inputSchema": {
+"properties": {
+"offset": {
+"type": "integer"
+},
+"path": {
+"type": "string"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "file_read"
+},
+{
+"description": "Write (or append) text to a file, creating parent folders.",
+"inputSchema": {
+"properties": {
+"append": {
+"type": "boolean"
+},
+"content": {
+"type": "string"
+},
+"path": {
+"type": "string"
+}
+},
+"required": [
+"path",
+"content"
+],
+"type": "object"
+},
+"name": "file_write"
+},
+{
+"description": "Delete a file or an empty folder (recursive=true for non-empty).",
+"inputSchema": {
+"properties": {
+"path": {
+"type": "string"
+},
+"recursive": {
+"type": "boolean"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "file_delete"
+},
+{
+"description": "Find files under a folder whose name contains `name` (case-insensitive), or text files containing `text`.",
+"inputSchema": {
+"properties": {
+"limit": {
+"type": "integer"
+},
+"name": {
+"type": "string"
+},
+"path": {
+"type": "string"
+},
+"text": {
+"type": "string"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "file_search"
+},
+{
+"description": "Move or rename a file/folder within allowed folders.",
+"inputSchema": {
+"properties": {
+"from": {
+"type": "string"
+},
+"to": {
+"type": "string"
+}
+},
+"required": [
+"from",
+"to"
+],
+"type": "object"
+},
+"name": "file_move"
+},
+{
+"description": "HTTP(S) request (GET/POST/PUT/DELETE/PATCH/HEAD) with headers and body; retries on connection errors. Returns status and first 64 KB of the body.",
+"inputSchema": {
+"properties": {
+"body": {
+"type": "string"
+},
+"headers": {
+"type": "object"
+},
+"method": {
+"type": "string"
+},
+"retries": {
+"type": "integer"
+},
+"url": {
+"type": "string"
+}
+},
+"required": [
+"url"
+],
+"type": "object"
+},
+"name": "http_request"
+},
+{
+"description": "Start a named timer. duration accepts '90s', '5 min', '1h 30m', '1:30:00'. Speaks and notifies when done.",
+"inputSchema": {
+"properties": {
+"duration": {
+"type": "string"
+},
+"name": {
+"type": "string"
+}
+},
+"required": [
+"duration"
+],
+"type": "object"
+},
+"name": "timer_start"
+},
+{
+"description": "List running timers with time remaining.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "timer_list"
+},
+{
+"description": "Cancel a running timer by name.",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "timer_cancel"
+},
+{
+"description": "Start or stop a named stopwatch (action=start|stop).",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop"
+],
+"type": "string"
+},
+"name": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "stopwatch"
+},
+{
+"description": "List active notifications (optionally filter by app or text). Each has a key for dismiss/act.",
+"inputSchema": {
+"properties": {
+"app": {
+"type": "string"
+},
+"limit": {
+"type": "integer"
+},
+"query": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "notifications_list"
+},
+{
+"description": "Dismiss one notification by key, all from an app, ones containing a keyword, or everything (all=true).",
+"inputSchema": {
+"properties": {
+"all": {
+"type": "boolean"
+},
+"app": {
+"type": "string"
+},
+"key": {
+"type": "string"
+},
+"keyword": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "notification_dismiss"
+},
+{
+"description": "Press a notification action button by title (or inline-reply with reply text).",
+"inputSchema": {
+"properties": {
+"action": {
+"type": "string"
+},
+"key": {
+"type": "string"
+},
+"reply": {
+"type": "string"
+}
+},
+"required": [
+"key",
+"action"
+],
+"type": "object"
+},
+"name": "notification_act"
+},
+{
+"description": "Post a notification on this phone (reminder, alert, status).",
+"inputSchema": {
+"properties": {
+"actions": {
+"items": {
+"type": "string"
+},
+"type": "array"
+},
+"text": {
+"type": "string"
+},
+"title": {
+"type": "string"
+}
+},
+"required": [
+"title"
+],
+"type": "object"
+},
+"name": "notification_post"
+},
+{
+"description": "Search past notifications. since_minutes limits age; digest=true returns per-app counts.",
+"inputSchema": {
+"properties": {
+"app": {
+"type": "string"
+},
+"digest": {
+"type": "boolean"
+},
+"limit": {
+"type": "integer"
+},
+"query": {
+"type": "string"
+},
+"since_minutes": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "notification_history"
+},
+{
+"description": "Return the most recent verification code seen in a notification within max_age_minutes (default 10).",
+"inputSchema": {
+"properties": {
+"max_age_minutes": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "otp_latest"
+},
+{
+"description": "Set the bot's face: mood (persists) and/or reaction (1-3 s), intensity 0-1, gaze look_x/look_y -1..1 (look_x=null resets).",
+"inputSchema": {
+"properties": {
+"duration_ms": {
+"description": "reaction length, default 2000",
+"type": "integer"
+},
+"intensity": {
+"type": "number"
+},
+"look_x": {
+"type": "number"
+},
+"look_y": {
+"type": "number"
+},
+"mood": {
+"type": "string"
+},
+"reaction": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "face_set"
+},
+{
+"description": "Adjust the default eyes: color (#RRGGBB), size (0.5-1.6), openness (0.1-1), blink_rate_s (1-15), pupil (0.3-1.5), roundness (0-0.5); reset=true restores defaults.",
+"inputSchema": {
+"properties": {
+"blink_rate_s": {
+"type": "number"
+},
+"color": {
+"type": "string"
+},
+"openness": {
+"type": "number"
+},
+"pupil": {
+"type": "number"
+},
+"reset": {
+"type": "boolean"
+},
+"roundness": {
+"type": "number"
+},
+"size": {
+"type": "number"
+}
+},
+"type": "object"
+},
+"name": "face_tweak"
+},
+{
+"description": "List installed persona packs and which is active.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "persona_list"
+},
+{
+"description": "Switch to a persona pack by id (face, theme, voice, tone change together). id='previous' switches back.",
+"inputSchema": {
+"properties": {
+"id": {
+"type": "string"
+}
+},
+"required": [
+"id"
+],
+"type": "object"
+},
+"name": "persona_set"
+},
+{
+"description": "Install or update a persona pack from JSON (id, name, eyeColorHex, theme, voice, license{source,author,license,allowedUse}). Packs without a valid license record or marked ripped are refused.",
+"inputSchema": {
+"properties": {
+"persona": {
+"type": "object"
+}
+},
+"required": [
+"persona"
+],
+"type": "object"
+},
+"name": "persona_save"
+},
+{
+"description": "Delete a user-created persona pack by id (built-ins cannot be deleted; the active pack falls back to default).",
+"inputSchema": {
+"properties": {
+"id": {
+"type": "string"
+}
+},
+"required": [
+"id"
+],
+"type": "object"
+},
+"name": "persona_delete"
+},
+{
+"description": "List the quick-action buttons on the bot screen, or replace them with set=[{id,label,tool,args}].",
+"inputSchema": {
+"properties": {
+"set": {
+"items": {
+"type": "object"
+},
+"type": "array"
+}
+},
+"type": "object"
+},
+"name": "quick_actions"
+},
+{
+"description": "Choose the face: mode=avatar (3D VRM avatar) or mode=eyes (the eyes face).",
+"inputSchema": {
+"properties": {
+"mode": {
+"enum": [
+"avatar",
+"eyes"
+],
+"type": "string"
+}
+},
+"required": [
+"mode"
+],
+"type": "object"
+},
+"name": "avatar_mode"
+},
+{
+"description": "Pose the 3D avatar yourself: bones = {boneName: [x,y,z]} for ANY bone or node of the model (VRM humanoid names like hips, spine, head, leftUpperArm, rightLowerLeg, leftIndexProximal, or any other node from avatar_bones), expressions = {name: 0..1} (aa ih ou ee oh blink, plus any the model has), offsets = {node: [x,y,z]} metres, hips_offset = [x,y,z] metres, blend_ms (default 250). reset=true returns to rest. Humanoid bones use euler [x, y, z] radians in the VRM's normalized space; all zero is the T-pose (arms straight out); the avatar rests with arms down (leftUpperArm z=+1.25, rightUpperArm z=-1.25). Any other node of the model (ears, tail, hair roots, props) can be rotated by name too, as an offset from its own rest rotation, and moved with offsets={name:[x,y,z]} metres. Call avatar_bones to list every name. Other axes: experiment and look at the screen. ",
+"inputSchema": {
+"properties": {
+"blend_ms": {
+"type": "integer"
+},
+"bones": {
+"type": "object"
+},
+"expressions": {
+"type": "object"
+},
+"hips_offset": {
+"items": {
+"type": "number"
+},
+"type": "array"
+},
+"offsets": {
+"type": "object"
+},
+"reset": {
+"type": "boolean"
+}
+},
+"type": "object"
+},
+"name": "avatar_pose"
+},
+{
+"description": "Play your own animation on the 3D avatar: keyframes = [{t_ms, bones:{name:[x,y,z]}, expressions:{}, offsets:{}, hips_offset:[x,y,z]}] (up to 60 keyframes, 60 s), loop=true repeats. Values ease between keyframes; a bone not set in a keyframe keeps interpolating between the ones that set it, and starts from rest. Stop with avatar_pose reset=true. Humanoid bones use euler [x, y, z] radians in the VRM's normalized space; all zero is the T-pose (arms straight out); the avatar rests with arms down (leftUpperArm z=+1.25, rightUpperArm z=-1.25). Any other node of the model (ears, tail, hair roots, props) can be rotated by name too, as an offset from its own rest rotation, and moved with offsets={name:[x,y,z]} metres. Call avatar_bones to list every name. Other axes: experiment and look at the screen. ",
+"inputSchema": {
+"properties": {
+"keyframes": {
+"items": {
+"type": "object"
+},
+"type": "array"
+},
+"loop": {
+"type": "boolean"
+}
+},
+"required": [
+"keyframes"
+],
+"type": "object"
+},
+"name": "avatar_animate"
+},
+{
+"description": "List every bone/node name of the loaded 3D avatar model (humanoid bones and extra nodes), so you can pose any of them with avatar_pose / avatar_animate.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "avatar_bones"
+},
+{
+"description": "Import a VRM avatar model from a file path on the phone (any license; the file must be a valid VRM).",
+"inputSchema": {
+"properties": {
+"path": {
+"type": "string"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "avatar_import"
+},
+{
+"description": "Installed avatars. action=list shows them; select (id) shows one; eyes shows the eyes face; next switches to the next one in the swipe ring; remove (id) deletes one.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"list",
+"select",
+"eyes",
+"next",
+"remove"
+],
+"type": "string"
+},
+"id": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "avatar_library"
+},
+{
+"description": "Browse the OpenSourceAvatars catalog of free VRM avatars. action=collections lists collections; action=list (collection, optional query, limit) lists avatars. Use avatar_download to install one.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"collections",
+"list"
+],
+"type": "string"
+},
+"collection": {
+"type": "string"
+},
+"limit": {
+"type": "integer"
+},
+"query": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "avatar_catalog"
+},
+{
+"description": "Download an avatar from the OpenSourceAvatars catalog (collection + id or exact name) and use it. Models with non-permissive licenses are rejected.",
+"inputSchema": {
+"properties": {
+"collection": {
+"type": "string"
+},
+"id": {
+"type": "string"
+}
+},
+"required": [
+"collection",
+"id"
+],
+"type": "object"
+},
+"name": "avatar_download"
+},
+{
+"description": "Play an imported VRM Animation clip on the avatar (action=play with name, stop, or list).",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"play",
+"stop",
+"list"
+],
+"type": "string"
+},
+"name": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "avatar_clip"
+},
+{
+"description": "Import a VRM Animation clip (.vrma, e.g. a dance) from a file path on the phone so avatar_clip can play it.",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+},
+"path": {
+"type": "string"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "avatar_import_clip"
+},
+{
+"description": "Always-listening wake word ('hey bot'): action=on|off|status.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"on",
+"off",
+"status"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "wake_control"
+},
+{
+"description": "Check whether a person is in front of the camera (default front; facing=back for the rear camera). Face count only, no identity, frame discarded.",
+"inputSchema": {
+"properties": {
+"facing": {
+"description": "Default front",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "presence_check"
+},
+{
+"description": "Emergency stop status or trigger (action=status|trigger). Only the user can reset it, on the phone.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"status",
+"trigger"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "kill_switch"
+},
+{
+"description": "Auto-adjust screen brightness from the light sensor (action=on|off|status).",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"on",
+"off",
+"status"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "ambient_mode"
+},
+{
+"description": "Tail of the tool-call audit log (tab-separated: time, tool, status, args). lines default 30, max 200.",
+"inputSchema": {
+"properties": {
+"lines": {
+"type": "integer"
+},
+"tool": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "audit_log"
+},
+{
+"description": "Create/replace an event routine: {id,name,trigger:{event,app?,contains?,ssid?,pkg?,kind?,place?,below?},actions:[{tool,args}],cooldownMs?}. Events: charger_connected, charger_disconnected, wifi_connected, wifi_disconnected, battery_low, notification, screen_on, screen_off, app_foreground, motion, place, clipboard, visual_change, sound.",
+"inputSchema": {
+"properties": {
+"routine": {
+"type": "object"
+}
+},
+"required": [
+"routine"
+],
+"type": "object"
+},
+"name": "routine_add"
+},
+{
+"description": "List routines.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "routine_list"
+},
+{
+"description": "Delete a routine by id.",
+"inputSchema": {
+"properties": {
+"id": {
+"type": "string"
+}
+},
+"required": [
+"id"
+],
+"type": "object"
+},
+"name": "routine_remove"
+},
+{
+"description": "Save a named place (home, desk, office) as lat/lon + radius_m (default 100), or here=true to use the current location. Use routine_add with trigger {event:'place', place:'home'} to react.",
+"inputSchema": {
+"properties": {
+"here": {
+"type": "boolean"
+},
+"lat": {
+"type": "number"
+},
+"lon": {
+"type": "number"
+},
+"name": {
+"type": "string"
+},
+"radius_m": {
+"type": "number"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "place_add"
+},
+{
+"description": "List saved places.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "place_list"
+},
+{
+"description": "Delete a saved place by name.",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "place_remove"
+},
+{
+"description": "Is the app in safe mode (started minimal after repeated crashes)? Exit it on the phone (Debug tab).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "safe_mode"
+},
+{
+"description": "Measure the room's sound level for duration_ms (default 1000, max 5000): dBFS and a label (silent/quiet/moderate/loud). Audio is analysed and discarded.",
+"inputSchema": {
+"properties": {
+"duration_ms": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "sound_level"
+},
+{
+"description": "Run the app self-test: bridge, speech, accessibility, notification access, camera, Hermes link. Returns pass/fail per check.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "self_test"
+},
+{
+"description": "Show an interactive native screen. Give `screen` (component tree, see generative-ui skill) or `template` (briefing, status, timer, persona_gallery) with `data`. surface=desk|overlay|full. Always include `speak`. Components: Text, Card, Row, Column, Button, Toggle, Slider, Gauge, Timer, ConfirmCard, AppTile, NotificationCard, DeviceToggle, StatusGauge, Image, Divider, PersonaView, SkillCard, WebEmbed.",
+"inputSchema": {
+"properties": {
+"data": {
+"type": "object"
+},
+"keep": {
+"description": "keep showing after a button action (default false: hides)",
+"type": "boolean"
+},
+"screen": {
+"type": "object"
+},
+"speak": {
+"type": "string"
+},
+"surface": {
+"enum": [
+"desk",
+"overlay",
+"full"
+],
+"type": "string"
+},
+"template": {
+"type": "string"
+},
+"ttl_s": {
+"description": "auto-hide after N seconds (default 90, 0 = never)",
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "ui_show"
+},
+{
+"description": "Remove the screen from a surface (or all when surface is omitted).",
+"inputSchema": {
+"properties": {
+"surface": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "ui_clear"
+},
+{
+"description": "Run a shell command on the phone (root by default). Destructive commands are blocked. Prefer specific tools when one exists.",
+"inputSchema": {
+"properties": {
+"cmd": {
+"type": "string"
+},
+"root": {
+"description": "Run as root (default true)",
+"type": "boolean"
+}
+},
+"required": [
+"cmd"
+],
+"type": "object"
+},
+"name": "shell"
+},
+{
+"description": "Send a Wake-on-LAN magic packet to a MAC address (optional broadcast address).",
+"inputSchema": {
+"properties": {
+"broadcast": {
+"type": "string"
+},
+"mac": {
+"type": "string"
+}
+},
+"required": [
+"mac"
+],
+"type": "object"
+},
+"name": "wake_on_lan"
+},
+{
+"description": "Check which TCP ports are open on a host (default common ports).",
+"inputSchema": {
+"properties": {
+"host": {
+"type": "string"
+},
+"ports": {
+"items": {
+"type": "integer"
+},
+"type": "array"
+}
+},
+"required": [
+"host"
+],
+"type": "object"
+},
+"name": "port_check"
+},
+{
+"description": "Scan your own LAN subnet for hosts with common open ports (subnet like 192.168.0.0/24, default: this phone's). Only scan networks you own.",
+"inputSchema": {
+"properties": {
+"ports": {
+"items": {
+"type": "integer"
+},
+"type": "array"
+},
+"subnet": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "lan_scan"
+},
+{
+"description": "Resolve a hostname to addresses.",
+"inputSchema": {
+"properties": {
+"host": {
+"type": "string"
+}
+},
+"required": [
+"host"
+],
+"type": "object"
+},
+"name": "dns_lookup"
+},
+{
+"description": "Publish one MQTT message (QoS 0) to a broker, e.g. Home Assistant / smart plugs. host, port (1883), topic, message, optional user/pass/retain.",
+"inputSchema": {
+"properties": {
+"host": {
+"type": "string"
+},
+"message": {
+"type": "string"
+},
+"pass": {
+"type": "string"
+},
+"port": {
+"type": "integer"
+},
+"retain": {
+"type": "boolean"
+},
+"topic": {
+"type": "string"
+},
+"user": {
+"type": "string"
+}
+},
+"required": [
+"host",
+"topic",
+"message"
+],
+"type": "object"
+},
+"name": "mqtt_publish"
+},
+{
+"description": "Download an http(s) URL into an allowed folder with resume and optional sha256 verification.",
+"inputSchema": {
+"properties": {
+"dest": {
+"type": "string"
+},
+"sha256": {
+"type": "string"
+},
+"url": {
+"type": "string"
+}
+},
+"required": [
+"url",
+"dest"
+],
+"type": "object"
+},
+"name": "download_file"
+},
+{
+"description": "Start/stop a read-only HTTP file server for a folder on the LAN (action=start|stop|status, optional token). Remember to stop it.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop",
+"status"
+],
+"type": "string"
+},
+"path": {
+"type": "string"
+},
+"port": {
+"type": "integer"
+},
+"token": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "serve_folder"
+},
+{
+"description": "Zip a file or folder (inside allowed folders) into dest.zip.",
+"inputSchema": {
+"properties": {
+"dest": {
+"type": "string"
+},
+"source": {
+"type": "string"
+}
+},
+"required": [
+"source",
+"dest"
+],
+"type": "object"
+},
+"name": "archive_zip"
+},
+{
+"description": "Extract a zip (zip-slip and size guarded) into a folder.",
+"inputSchema": {
+"properties": {
+"dest": {
+"type": "string"
+},
+"zip": {
+"type": "string"
+}
+},
+"required": [
+"zip",
+"dest"
+],
+"type": "object"
+},
+"name": "archive_unzip"
+},
+{
+"description": "Checksum of a file (algo sha256 default, md5, sha1).",
+"inputSchema": {
+"properties": {
+"algo": {
+"type": "string"
+},
+"path": {
+"type": "string"
+}
+},
+"required": [
+"path"
+],
+"type": "object"
+},
+"name": "file_hash"
+},
+{
+"description": "Append a timestamped note (or saved link) to the notes file for later recall; optional tag.",
+"inputSchema": {
+"properties": {
+"tag": {
+"type": "string"
+},
+"text": {
+"type": "string"
+}
+},
+"required": [
+"text"
+],
+"type": "object"
+},
+"name": "quick_note"
+},
+{
+"description": "Search quick notes by text (case-insensitive); returns up to 20 recent matches.",
+"inputSchema": {
+"properties": {
+"query": {
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "notes_search"
+},
+{
+"description": "One 0-100 device health score with the worst issue (battery, heat, storage, network, tool failures, kill switch).",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "health_score"
+},
+{
+"description": "Start any Android intent: action (android.intent.action.VIEW/SEND/SENDTO/DIAL, android.settings.*, \u2026), uri, mime type, package, extras {key:string}. Covers deep links, share to a named app, mailto drafts, navigation, settings pages.",
+"inputSchema": {
+"properties": {
+"action": {
+"type": "string"
+},
+"extras": {
+"type": "object"
+},
+"package": {
+"type": "string"
+},
+"type": {
+"type": "string"
+},
+"uri": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "intent_start"
+},
+{
+"description": "Search photos/videos/audio on the phone by name text and/or age: kind=image|video|audio, query (file name contains), since_days. Returns path, size, date.",
+"inputSchema": {
+"properties": {
+"kind": {
+"enum": [
+"image",
+"video",
+"audio"
+],
+"type": "string"
+},
+"limit": {
+"type": "integer"
+},
+"query": {
+"type": "string"
+},
+"since_days": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "media_search"
+},
+{
+"description": "Record microphone audio to an .m4a in Recordings for seconds (1-600, default 10); returns the file path. Blocks until finished.",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+},
+"seconds": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "audio_record"
+},
+{
+"description": "List or choose the audio output: action=list|speaker|bluetooth|wired|default. (Android 12+ communication device routing.)",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"list",
+"speaker",
+"bluetooth",
+"wired",
+"default"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "audio_route"
+},
+{
+"description": "Log a sensor to CSV every period_s seconds: action=start sensor=light|accelerometer|\u2026 period_s=\u2026 | stop | status. File: sensor_<name>.csv in the Deskbot folder.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop",
+"status"
+],
+"type": "string"
+},
+"period_s": {
+"type": "integer"
+},
+"sensor": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "sensor_log"
+},
+{
+"description": "Record the tool calls you make into a named macro: action=start name=\u2026 | stop.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop"
+],
+"type": "string"
+},
+"name": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "macro_record"
+},
+{
+"description": "Replay a saved macro by name (stops at the first failing step).",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "macro_play"
+},
+{
+"description": "List saved macros.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "macro_list"
+},
+{
+"description": "Delete a macro by name.",
+"inputSchema": {
+"properties": {
+"name": {
+"type": "string"
+}
+},
+"required": [
+"name"
+],
+"type": "object"
+},
+"name": "macro_delete"
+},
+{
+"description": "Show the Deskbot face and answers on the lock screen: action=on|off|status. Only enable on a dedicated device without private data.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"on",
+"off",
+"status"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "lock_display"
+},
+{
+"description": "Watch a camera for scene changes (something appears, moves or disappears): action=start|stop|status, period_s (default 60, min 10), facing=front|back (default front), sensitivity=low|normal|high. Changes fire routine event 'visual_change'; status reports checks, events and last diff score.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop",
+"status"
+],
+"type": "string"
+},
+"facing": {
+"description": "Default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"period_s": {
+"type": "integer"
+},
+"sensitivity": {
+"enum": [
+"low",
+"normal",
+"high"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "visual_watch"
+},
+{
+"description": "Read the text in the current screen (default) or a camera frame (source=camera, facing=front|back) with on-device OCR. Returns data.text and line boxes.",
+"inputSchema": {
+"properties": {
+"facing": {
+"description": "Camera only; default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"source": {
+"enum": [
+"screen",
+"camera"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "ocr"
+},
+{
+"description": "Read a table on the screen (default) or camera and return it as CSV in data.csv (rows and columns rebuilt from text positions). For charts, data.text holds labels/axis values; set include_image=true to also get the picture in data.image_base64 to describe it.",
+"inputSchema": {
+"properties": {
+"facing": {
+"description": "Camera only; default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"include_image": {
+"type": "boolean"
+},
+"source": {
+"enum": [
+"screen",
+"camera"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "table_to_csv"
+},
+{
+"description": "Scan QR codes and barcodes from the camera (default, facing=front|back) or the screen. Tries up to attempts (default 3, max 6) frames. Returns data.codes [{format,text,kind}].",
+"inputSchema": {
+"properties": {
+"attempts": {
+"type": "integer"
+},
+"facing": {
+"description": "Camera only; default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"source": {
+"enum": [
+"screen",
+"camera"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "scan_code"
+},
+{
+"description": "Scan a document: capture a high-resolution frame from the camera (default front; use facing=back for a page on the desk) or screen, OCR it, save the JPEG. Returns data.text and data.path.",
+"inputSchema": {
+"properties": {
+"facing": {
+"description": "Camera only; default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"source": {
+"enum": [
+"screen",
+"camera"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "scan_document"
+},
+{
+"description": "Recognise and count objects in a camera frame (default front, facing=back for the desk) or the screen. Optional label filters the count. Returns data.total, data.counts, data.labels.",
+"inputSchema": {
+"properties": {
+"facing": {
+"description": "Camera only; default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"label": {
+"type": "string"
+},
+"source": {
+"enum": [
+"screen",
+"camera"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "count_objects"
+},
+{
+"description": "Time-lapse: action=start|stop|status, facing=front|back (default front), interval_s (default 10, min 2), count (default 60, max 2000), name (folder). Frames f_0000.jpg... go to Deskbot/timelapse/<name>; make a video with `ffmpeg -framerate 10 -i f_%04d.jpg out.mp4` in Termux.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop",
+"status"
+],
+"type": "string"
+},
+"count": {
+"type": "integer"
+},
+"facing": {
+"description": "Default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+},
+"interval_s": {
+"type": "integer"
+},
+"name": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "time_lapse"
+},
+{
+"description": "Record a video clip: facing=front|back (default front), duration_s (default 10, max 120), audio=true to include the microphone. Saved under Deskbot/videos; returns data.path.",
+"inputSchema": {
+"properties": {
+"audio": {
+"type": "boolean"
+},
+"duration_s": {
+"type": "integer"
+},
+"facing": {
+"description": "Default front (faces the user)",
+"enum": [
+"front",
+"back"
+],
+"type": "string"
+}
+},
+"type": "object"
+},
+"name": "video_record"
+},
+{
+"description": "Listen for sudden loud sounds (doorbell, clap): action=start|stop|status, period_s (default 15). Spikes fire routine event 'sound'. Audio is never stored.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"stop",
+"status"
+],
+"type": "string"
+},
+"period_s": {
+"type": "integer"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "sound_watch"
+},
+{
+"description": "Rank active notifications by importance (high/normal/low) with reasons, skipping silenced apps. dismiss_silenced=true also clears the silenced ones.",
+"inputSchema": {
+"properties": {
+"dismiss_silenced": {
+"type": "boolean"
+},
+"limit": {
+"type": "integer"
+}
+},
+"type": "object"
+},
+"name": "notifications_rank"
+},
+{
+"description": "Manage silence rules: action=add|remove|list. add needs app (label or package part), optional contains and minutes (0/omitted = until removed).",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"add",
+"remove",
+"list"
+],
+"type": "string"
+},
+"app": {
+"type": "string"
+},
+"contains": {
+"type": "string"
+},
+"minutes": {
+"type": "integer"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "notification_silence"
+},
+{
+"description": "What music/audio is playing: title, artist, album and the app, from active media sessions (needs notification access). Look the song up with web_search using search_query.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "now_playing"
+},
+{
+"description": "Show a short answer on the lock screen as a notification visible without unlocking: action=show (title, text) | clear. Never put private data in it.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"show",
+"clear"
+],
+"type": "string"
+},
+"text": {
+"type": "string"
+},
+"title": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "lock_screen_answer"
+},
+{
+"description": "Software charge cap: action=set (percent 50-100) | off | status | check. Alerts with a notification and speech when charging reaches the cap; it cannot stop charging itself (hardware cap needs a root script).",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"set",
+"off",
+"status",
+"check"
+],
+"type": "string"
+},
+"percent": {
+"type": "integer"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "charge_limit"
+},
+{
+"description": "Scheduled device health checks: action=enable (interval_min 5-1440 default 60, min_score default 70, speak) | disable | status | run. Alerts by notification when the health score drops below min_score.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"enable",
+"disable",
+"status",
+"run"
+],
+"type": "string"
+},
+"interval_min": {
+"type": "integer"
+},
+"min_score": {
+"type": "integer"
+},
+"speak": {
+"type": "boolean"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "health_check"
+},
+{
+"description": "Reminders that wait for a condition and nag until done: action=add (text, when=place|charger, place name for when=place, nag_every_min default 10) | list | done (id or text) | remove (id). Timed reminders use Hermes cron instead.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"add",
+"list",
+"done",
+"remove"
+],
+"type": "string"
+},
+"id": {
+"type": "string"
+},
+"nag_every_min": {
+"type": "integer"
+},
+"place": {
+"type": "string"
+},
+"text": {
+"type": "string"
+},
+"when": {
+"enum": [
+"place",
+"charger"
+],
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "reminder_when"
+},
+{
+"description": "List built-in routine templates (wakeup, bedtime, focus) and which are running.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "routine_template_list"
+},
+{
+"description": "Start a built-in routine template by id with optional params (wakeup: ramp_min, briefing; bedtime: dnd, dim_percent, summary; focus: minutes, allow). Runs in the background.",
+"inputSchema": {
+"properties": {
+"id": {
+"enum": [
+"wakeup",
+"bedtime",
+"focus"
+],
+"type": "string"
+},
+"params": {
+"type": "object"
+}
+},
+"required": [
+"id"
+],
+"type": "object"
+},
+"name": "routine_template_run"
+},
+{
+"description": "Stop a running routine template by id (a focus session also needs focus_filter off and dnd off).",
+"inputSchema": {
+"properties": {
+"id": {
+"type": "string"
+}
+},
+"required": [
+"id"
+],
+"type": "object"
+},
+"name": "routine_template_cancel"
+},
+{
+"description": "Focus notification filter: action=on (minutes 1-180, allow = app names that may still notify) | off | status. While on, notifications from other apps are dismissed.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"on",
+"off",
+"status"
+],
+"type": "string"
+},
+"allow": {
+"items": {
+"type": "string"
+},
+"type": "array"
+},
+"minutes": {
+"type": "integer"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "focus_filter"
+},
+{
+"description": "Whether the bot is holding speech (in a call, Do Not Disturb, sleep hours, focus) and how many spoken notes are waiting.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "quiet_status"
+},
+{
+"description": "Important alert that repeats louder until acknowledged. action=raise (id,text) | ack (id optional) | status.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"raise",
+"ack",
+"status"
+],
+"type": "string"
+},
+"id": {
+"type": "string"
+},
+"text": {
+"type": "string"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "alert_escalate"
+},
+{
+"description": "Run steps as an interruptible task (pauses when the user speaks, resumes after). action=start (name, steps:[{tool,args}], max 20) | status | cancel.",
+"inputSchema": {
+"properties": {
+"action": {
+"enum": [
+"start",
+"status",
+"cancel"
+],
+"type": "string"
+},
+"name": {
+"type": "string"
+},
+"steps": {
+"items": {
+"type": "object"
+},
+"type": "array"
+}
+},
+"required": [
+"action"
+],
+"type": "object"
+},
+"name": "task"
+},
+{
+"description": "Mine the audit log for actions the user repeats at about the same time on several days and propose automating them.",
+"inputSchema": {
+"properties": {},
+"type": "object"
+},
+"name": "routine_suggest"
+}
+]
+}

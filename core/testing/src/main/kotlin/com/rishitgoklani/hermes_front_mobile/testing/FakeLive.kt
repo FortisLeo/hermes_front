@@ -37,7 +37,14 @@ class FakeLiveSession : LiveSession {
 /** Microphone fed by the test through [mic]. */
 class FakeLiveAudioIn : LiveAudioIn {
     val mic = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
-    override fun chunks(): Flow<ByteArray> = mic
+    /** The next this-many calls to [chunks] fail as if the microphone had been taken away. */
+    var failures = 0
+    var opens = 0
+    override fun chunks(): Flow<ByteArray> = kotlinx.coroutines.flow.flow {
+        opens++
+        if (failures > 0) { failures--; throw java.io.IOException("microphone busy") }
+        mic.collect { emit(it) }
+    }
 }
 
 class FakeLiveAudioOut : LiveAudioOut {
@@ -56,4 +63,10 @@ class FakeLiveSettings(initial: LiveSettings = LiveSettings(enabled = true, apiK
     private val state = MutableStateFlow(initial)
     override val settings: Flow<LiveSettings> = state
     override suspend fun save(settings: LiveSettings) { state.value = settings }
+}
+
+/** In-memory skill guides: id -> full text. */
+class FakeSkillSource(private val skills: Map<String, String>) : com.rishitgoklani.hermes_front_mobile.domain.live.SkillSource {
+    override fun list() = skills.map { (id, text) -> com.rishitgoklani.hermes_front_mobile.domain.live.SkillParser.parse(id, text) }
+    override fun read(id: String): String? = skills[id]
 }

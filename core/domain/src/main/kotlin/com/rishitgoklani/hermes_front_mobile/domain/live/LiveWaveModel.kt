@@ -2,9 +2,13 @@ package com.rishitgoklani.hermes_front_mobile.domain.live
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** What the on-screen wave needs from a live conversation: is one running, and how loud is the user right now. */
+/** A short message for the user about the conversation itself (why it stopped, that it is reconnecting). [id] makes a repeat of the same text a new notice. */
+data class LiveNotice(val id: Long, val text: String)
+
+/** What the on-screen wave needs from a live conversation: is one running, how loud is the user right now, and anything the user should be told. */
 interface LiveActivity {
     val active: StateFlow<Boolean>
+    val notice: StateFlow<LiveNotice?>
     /** 0..1 loudness of the microphone while it is open to the model; 0 while it is muted. */
     val micLevel: StateFlow<Float>
 }

@@ -80,7 +80,7 @@ internal fun AboutBlock(about: AboutInfo) {
 
 class LiveSettingsActions(
     val onEnabled: (Boolean) -> Unit = {}, val onApiKey: (String) -> Unit = {}, val onModel: (String) -> Unit = {},
-    val onVoice: (String) -> Unit = {}, val onHalfDuplex: (Boolean) -> Unit = {}, val onSave: () -> Unit = {},
+    val onVoice: (String) -> Unit = {}, val onHalfDuplex: (Boolean) -> Unit = {}, val onSave: () -> Unit = {}, val onAllTools: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -101,6 +101,10 @@ internal fun LiveSettingsSection(state: LiveSettingsUiState, a: LiveSettingsActi
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Column(Modifier.weight(1f)) { Text("Mute mic while it talks"); Text("Stops it hearing itself. Turn off to interrupt it by speaking.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Switch(checked = s.halfDuplex, onCheckedChange = a.onHalfDuplex)
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(Modifier.weight(1f)) { Text("All phone tools and skills"); Text("Lets Gemini use every tool and skill guide Hermes has. Turn off for a lean set of about 35 tools.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Switch(checked = s.allTools, onCheckedChange = a.onAllTools)
     }
     Button(onClick = a.onSave, modifier = Modifier.padding(top = 12.dp).minTarget()) { Text("Save Gemini settings") }
     if (state.saved) Text("Saved", modifier = Modifier.padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Polite })
