@@ -33,7 +33,10 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
     private val programs = sharedPrograms ?: ProgramCache()
 
     /** Two position buffers (and VAOs) for morphing primitives: one is drawn while the other is written, so the driver never stalls on an in-flight buffer. */
-    private class Gpu(val vao: IntArray, val pos: IntArray, val attr: Int, val ibo: Int) { var cur = 0 }
+    private class PosGroup(val bufs: IntArray) { var cur = 0 }
+    private class Gpu(val vao: IntArray, val group: PosGroup, val attr: Int, val ibo: Int)
+    /** Primitives of one mesh usually read the same packed vertex arrays; the parser hands out the same buffer object and the GPU copy is made once. */
+    private val posGroups = java.util.IdentityHashMap<ByteBuffer, PosGroup>(); private val attrBufs = java.util.IdentityHashMap<ByteBuffer, Int>()
     private val gpu = ArrayList<Gpu>(); private val textures = IntArray(asset.images.size)
     private val skinRows = asset.skins.map { FloatArray(it.joints.size * 12) }
     private val skinStamps = LongArray(asset.skins.size) { -1L }
@@ -67,7 +70,8 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
         Trace.beginSection("GlModel.init")
         try {
             val morphIdx = ArrayList<Int>()
-            for ((i, p) in asset.primitives.withIndex()) if (p.morphBase != null) { morphIdx += i; morphRange[i] = MorphMath.touchedRange(p.morphTargets) }
+            val seenMorph = java.util.IdentityHashMap<ByteBuffer, Boolean>()
+            for ((i, p) in asset.primitives.withIndex()) if (p.morphBase != null && seenMorph.put(p.positions, true) == null) { morphIdx += i; morphRange[i] = MorphMath.touchedRange(p.morphTargets) }
             morphPrims = morphIdx.toIntArray()
             val maxSpan = morphPrims.maxOfOrNull { val r = morphRange[it]; if (r == null) 0 else r[1] - r[0] + 1 } ?: 0
             morphScratch = ByteBuffer.allocateDirect(maxSpan * 12).order(ByteOrder.nativeOrder()).asFloatBuffer(); morphWork = FloatArray(maxSpan * 3)
@@ -81,12 +85,18 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
         // Unbind the previous primitive's VAO: element-array binds below would otherwise overwrite that VAO's index buffer.
         GLES30.glBindVertexArray(0)
         val morph = p.morphBase != null; val copies = if (morph) 2 else 1
-        val posBufs = IntArray(copies); GLES30.glGenBuffers(copies, posBufs, 0)
-        val other = IntArray(2); GLES30.glGenBuffers(2, other, 0); val attr = other[0]; val ibo = other[1]
-        for (b in posBufs) { p.positions.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, b)
-            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * 12, p.positions, if (morph) GLES30.GL_DYNAMIC_DRAW else GLES30.GL_STATIC_DRAW) }
-        p.attributes.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, attr)
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * p.attributeStride, p.attributes, GLES30.GL_STATIC_DRAW)
+        val group = posGroups.getOrPut(p.positions) {
+            val bufs = IntArray(copies); GLES30.glGenBuffers(copies, bufs, 0)
+            for (b in bufs) { p.positions.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, b)
+                GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * 12, p.positions, if (morph) GLES30.GL_DYNAMIC_DRAW else GLES30.GL_STATIC_DRAW) }
+            PosGroup(bufs)
+        }
+        val posBufs = group.bufs
+        val attr = attrBufs.getOrPut(p.attributes) {
+            val id = IntArray(1); GLES30.glGenBuffers(1, id, 0); p.attributes.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, id[0])
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * p.attributeStride, p.attributes, GLES30.GL_STATIC_DRAW); id[0]
+        }
+        val iboId = IntArray(1); GLES30.glGenBuffers(1, iboId, 0); val ibo = iboId[0]
         p.indices.position(0); GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibo)
         GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, p.indices.remaining(), p.indices, GLES30.GL_STATIC_DRAW)
         val vaos = IntArray(copies); GLES30.glGenVertexArrays(copies, vaos, 0)
@@ -102,7 +112,7 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
             }
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibo)
         }
-        return Gpu(vaos, posBufs, attr, ibo)
+        return Gpu(vaos, group, attr, ibo)
     }
 
     /**
@@ -144,9 +154,9 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
                     for (k in target.vertices.indices) { val v = (target.vertices[k] - lo) * 3
                         morphWork[v] += target.deltas[k * 3] * wt; morphWork[v + 1] += target.deltas[k * 3 + 1] * wt; morphWork[v + 2] += target.deltas[k * 3 + 2] * wt } }
                 morphScratch.clear(); morphScratch.put(morphWork, 0, n); morphScratch.flip()
-                val g = gpu[i]; val next = 1 - g.cur
-                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, g.pos[next]); GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, lo * 12, n * 4, morphScratch)
-                g.cur = next; pendingBytes += n * 4; any = true
+                val g = gpu[i]; val next = 1 - g.group.cur
+                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, g.group.bufs[next]); GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, lo * 12, n * 4, morphScratch)
+                g.group.cur = next; pendingBytes += n * 4; any = true
             }
             rig.dirtyMeshes.clear()
         } finally { Trace.endSection() }
@@ -229,7 +239,7 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
                 if (flags and ShaderSources.FLAG_BASE_TEX != 0) bind(0, tex(mat.baseImage))
                 if (flags and ShaderSources.FLAG_SHADE_TEX != 0) bind(1, tex(mat.shadeImage))
                 if (flags and ShaderSources.FLAG_EMISSIVE_TEX != 0) bind(2, tex(mat.emissiveImage))
-                val g = gpu[item.primitive]; val vao = g.vao[g.cur]
+                val g = gpu[item.primitive]; val vao = g.vao[g.group.cur]
                 if (vao != curVao) { GLES30.glBindVertexArray(vao); curVao = vao }
                 GLES30.glDrawElements(GLES30.GL_TRIANGLES, p.indexCount, if (p.indicesAreInt) GLES30.GL_UNSIGNED_INT else GLES30.GL_UNSIGNED_SHORT, 0); calls++
             }
@@ -262,7 +272,10 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
     fun draw(vp: FloatArray, light: FloatArray, program: (skinned: Boolean) -> GlProgram) = draw(vp, light, true)
 
     fun release() {
-        for (g in gpu) { GLES30.glDeleteVertexArrays(g.vao.size, g.vao, 0); GLES30.glDeleteBuffers(g.pos.size, g.pos, 0); GLES30.glDeleteBuffers(2, intArrayOf(g.attr, g.ibo), 0) }
+        for (g in gpu) { GLES30.glDeleteVertexArrays(g.vao.size, g.vao, 0); GLES30.glDeleteBuffers(1, intArrayOf(g.ibo), 0) }
+        for (grp in posGroups.values) GLES30.glDeleteBuffers(grp.bufs.size, grp.bufs, 0)
+        for (b in attrBufs.values) GLES30.glDeleteBuffers(1, intArrayOf(b), 0)
+        posGroups.clear(); attrBufs.clear()
         gpu.clear(); GLES30.glDeleteTextures(textures.size, textures, 0); GLES30.glDeleteTextures(boneTex.size, boneTex, 0)
         if (ownsPrograms) programs.release()
     }

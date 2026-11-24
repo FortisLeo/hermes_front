@@ -74,4 +74,13 @@ class VrmParserTest {
     @Test fun halfFloatRoundTrips() {
         for (v in listOf(0f, 1f, -2.5f, 0.333f, 100f, 1e-3f)) assertEquals(v, Half.toFloat(Half.fromFloat(v)), kotlin.math.abs(v) * 1e-3f + 1e-6f)
     }
+
+    @Test fun primitivesReadingTheSameAccessorsShareOnePackedVertexArray() {
+        val a = VrmParser.parse(Glb.parse(MiniVrm.build(secondPrimitive = true)))
+        assertEquals(2, a.primitives.size)
+        assertTrue("positions packed once", a.primitives[0].positions === a.primitives[1].positions)
+        assertTrue("attributes packed once", a.primitives[0].attributes === a.primitives[1].attributes)
+        assertTrue("morph targets shared", a.primitives[0].morphTargets === a.primitives[1].morphTargets)
+        assertTrue("indices stay per primitive", a.primitives[0].indices !== a.primitives[1].indices)
+    }
 }

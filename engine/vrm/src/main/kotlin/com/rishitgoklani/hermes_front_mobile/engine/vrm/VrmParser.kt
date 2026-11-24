@@ -41,11 +41,11 @@ object VrmParser {
         val materials = parseMaterials(root, v0, images.size)
         val bMin = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE); val bMax = floatArrayOf(-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
         val world = restWorldMatrices(nodes)
-        val prims = ArrayList<VrmPrimitive>(); val targetCounts = HashMap<Int, Int>()
+        val prims = ArrayList<VrmPrimitive>(); val targetCounts = HashMap<Int, Int>(); val shared = HashMap<List<Any?>, Shared>()
         for (n in nodes) if (n.mesh >= 0) {
             val mesh = root.a("meshes").getOrNull(n.mesh).obj() ?: continue
             for (p in mesh.a("primitives")) {
-                val prim = parsePrimitive(p.obj() ?: continue, n, acc, materials.size, skins) ?: continue
+                val prim = parsePrimitive(p.obj() ?: continue, n, acc, materials.size, skins, shared) ?: continue
                 prims += prim; targetCounts[n.mesh] = max(targetCounts[n.mesh] ?: 0, prim.morphTargets.size)
                 accumulateBounds(prim, if (prim.skinned) null else world, n.index, bMin, bMax)
             }
@@ -115,38 +115,47 @@ object VrmParser {
     }
 
     // ---- geometry ----
-    private fun parsePrimitive(p: JsonObject, node: VrmNode, acc: Accessors, materialCount: Int, skins: List<VrmSkin>): VrmPrimitive? {
+    /** Vertex data packed once and shared by every primitive of a mesh that reads the same accessors (VRoid meshes split one vertex array across many materials). */
+    private class Shared(val n: Int, val pos: FloatArray, val posBuf: ByteBuffer, val attr: ByteBuffer, val stride: Int, val targets: List<MorphTarget>)
+
+    private fun parsePrimitive(p: JsonObject, node: VrmNode, acc: Accessors, materialCount: Int, skins: List<VrmSkin>, cache: MutableMap<List<Any?>, Shared>): VrmPrimitive? {
         if ((p.i("mode") ?: 4) != 4) return null
         val attrs = p.o("attributes") ?: return null; val posAcc = attrs.i("POSITION") ?: return null
-        val pos = acc.floats(posAcc); val n = pos.size / 3; if (n == 0) return null
         val skinned = node.skin >= 0 && attrs.i("JOINTS_0") != null && attrs.i("WEIGHTS_0") != null
         if (skinned && node.skin !in skins.indices) return null
+        val key = listOf(posAcc, attrs.i("NORMAL"), attrs.i("TEXCOORD_0"), skinned, if (skinned) attrs.i("JOINTS_0") else null, if (skinned) attrs.i("WEIGHTS_0") else null, p.a("targets").map { it.obj()?.i("POSITION") })
+        val sh = cache[key] ?: run {
+            val pos = acc.floats(posAcc); val n = pos.size / 3; if (n == 0) return null
+            val stride = if (skinned) 16 else 8
+            val a = ByteBuffer.allocateDirect(n * stride).order(ByteOrder.LITTLE_ENDIAN)
+            val normals = attrs.i("NORMAL")?.let { acc.floats(it) }; val uvs = attrs.i("TEXCOORD_0")?.let { acc.floats(it) }
+            val joints = if (skinned) acc.ints(attrs.i("JOINTS_0")!!) else null; val weights = if (skinned) acc.floats(attrs.i("WEIGHTS_0")!!) else null
+            val w = FloatArray(4); val q = IntArray(4)
+            for (v in 0 until n) {
+                val o = v * stride
+                val nx = normals?.get(v * 3) ?: 0f; val ny = normals?.get(v * 3 + 1) ?: 1f; val nz = normals?.get(v * 3 + 2) ?: 0f
+                a.put(o, snorm(nx)); a.put(o + 1, snorm(ny)); a.put(o + 2, snorm(nz)); a.put(o + 3, 0)
+                a.putShort(o + 4, Half.fromFloat(uvs?.get(v * 2) ?: 0f)); a.putShort(o + 6, Half.fromFloat(uvs?.get(v * 2 + 1) ?: 0f))
+                if (skinned) {
+                    for (k in 0..3) w[k] = weights!![v * 4 + k]; val sum = w[0] + w[1] + w[2] + w[3]
+                    var big = 0
+                    for (k in 0..3) { q[k] = if (sum > 0f) Math.round(w[k] / sum * 255f) else if (k == 0) 255 else 0; if (q[k] > q[big]) big = k }
+                    q[big] += 255 - (q[0] + q[1] + q[2] + q[3])
+                    for (k in 0..3) { a.put(o + 8 + k, joints!![v * 4 + k].coerceIn(0, 255).toByte()); a.put(o + 12 + k, q[k].coerceIn(0, 255).toByte()) }
+                }
+            }
+            val posBuf = ByteBuffer.allocateDirect(pos.size * 4).order(ByteOrder.LITTLE_ENDIAN); posBuf.asFloatBuffer().put(pos)
+            val targets = p.a("targets").mapNotNull { t -> t.obj()?.i("POSITION")?.let { sparse(acc.floats(it)) } }
+            Shared(n, pos, posBuf, a, stride, targets).also { cache[key] = it }
+        }
+        val n = sh.n
         val idx = p.i("indices")?.let { acc.ints(it) } ?: IntArray(n) { it }
         if (idx.size < 3 || idx.any { it < 0 || it >= n }) return null
-        val stride = if (skinned) 16 else 8
-        val a = ByteBuffer.allocateDirect(n * stride).order(ByteOrder.LITTLE_ENDIAN)
-        val normals = attrs.i("NORMAL")?.let { acc.floats(it) }; val uvs = attrs.i("TEXCOORD_0")?.let { acc.floats(it) }
-        val joints = if (skinned) acc.ints(attrs.i("JOINTS_0")!!) else null; val weights = if (skinned) acc.floats(attrs.i("WEIGHTS_0")!!) else null
-        for (v in 0 until n) {
-            val o = v * stride
-            val nx = normals?.get(v * 3) ?: 0f; val ny = normals?.get(v * 3 + 1) ?: 1f; val nz = normals?.get(v * 3 + 2) ?: 0f
-            a.put(o, snorm(nx)); a.put(o + 1, snorm(ny)); a.put(o + 2, snorm(nz)); a.put(o + 3, 0)
-            a.putShort(o + 4, Half.fromFloat(uvs?.get(v * 2) ?: 0f)); a.putShort(o + 6, Half.fromFloat(uvs?.get(v * 2 + 1) ?: 0f))
-            if (skinned) {
-                val w = floatArrayOf(weights!![v * 4], weights[v * 4 + 1], weights[v * 4 + 2], weights[v * 4 + 3]); val sum = w.sum()
-                val q = IntArray(4) { if (sum > 0f) Math.round(w[it] / sum * 255f) else if (it == 0) 255 else 0 }
-                val diff = 255 - q.sum(); val big = q.indices.maxByOrNull { q[it] }!!; q[big] += diff
-                for (k in 0..3) { a.put(o + 8 + k, joints!![v * 4 + k].coerceIn(0, 255).toByte()); a.put(o + 12 + k, q[k].coerceIn(0, 255).toByte()) }
-            }
-        }
-        val posBuf = ByteBuffer.allocateDirect(pos.size * 4).order(ByteOrder.LITTLE_ENDIAN); posBuf.asFloatBuffer().put(pos)
         val asInt = n > 65535
         val ib = ByteBuffer.allocateDirect(idx.size * (if (asInt) 4 else 2)).order(ByteOrder.LITTLE_ENDIAN)
         if (asInt) ib.asIntBuffer().put(idx) else { val sb = ib.asShortBuffer(); for (v in idx) sb.put(v.toShort()) }
-        val targets = p.a("targets").mapNotNull { t -> t.obj()?.i("POSITION")?.let { sparse(acc.floats(it)) } }
-        val mesh = node.mesh
-        return VrmPrimitive(mesh, node.index, if (skinned) node.skin else -1, (p.i("material") ?: -1).takeIf { it in 0 until materialCount } ?: -1, n,
-            posBuf, a, stride, ib, idx.size, asInt, if (targets.isNotEmpty()) pos else null, targets)
+        return VrmPrimitive(node.mesh, node.index, if (skinned) node.skin else -1, (p.i("material") ?: -1).takeIf { it in 0 until materialCount } ?: -1, n,
+            sh.posBuf, sh.attr, sh.stride, ib, idx.size, asInt, if (sh.targets.isNotEmpty()) sh.pos else null, sh.targets)
     }
 
     private fun snorm(v: Float): Byte = Math.round(v.coerceIn(-1f, 1f) * 127f).toByte()

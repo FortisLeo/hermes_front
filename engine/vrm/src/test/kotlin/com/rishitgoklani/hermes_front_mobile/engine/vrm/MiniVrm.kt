@@ -21,7 +21,7 @@ object MiniVrm {
 
     /** [arms] adds leftUpperArm/leftHand/rightUpperArm/rightHand/leftEye/rightEye (nodes 7..12) in a T-pose, the character's left at +X for VRM 1.0 and -X for VRM 0.x.
      *  [expressions1] replaces the VRM 1.0 expression block; [v0Groups] replaces the VRM 0.x blend shape groups; [shade] gives the VRM 0.x _ShadeShift/_ShadeToony. */
-    fun build(vrm1: Boolean = false, withSprings: Boolean = true, arms: Boolean = false, expressions1: String? = null, v0Groups: String? = null, shade: Pair<Float, Float>? = null, targets: Int = 1): ByteArray {
+    fun build(vrm1: Boolean = false, withSprings: Boolean = true, arms: Boolean = false, expressions1: String? = null, v0Groups: String? = null, shade: Pair<Float, Float>? = null, targets: Int = 1, secondPrimitive: Boolean = false): ByteArray {
         val bin = Bin()
         val pos = bin.add(f(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f), 3, 5126, "VEC3")
         val nrm = bin.add(f(0f, 0f, 1f, 0f, 0f, 1f, 0f, 0f, 1f), 3, 5126, "VEC3")
@@ -56,8 +56,9 @@ object MiniVrm {
           "VRMC_springBone":{"specVersion":"1.0","colliders":[{"node":1,"shape":{"sphere":{"offset":[0,0,0],"radius":0.1}}}],"colliderGroups":[{"colliders":[0]}],
           "springs":[{"joints":[{"node":4,"stiffness":1,"gravityPower":0.5,"dragForce":0.4,"hitRadius":0.01},{"node":5}],"colliderGroups":[0]}]}}"""
         val matExt = if (vrm1) """,{"extensions":{"KHR_materials_mtoon":{"shadeColorFactor":[0.1,0.2,0.3],"shadingShiftFactor":0.2,"outlineWidthMode":"worldCoordinates","outlineWidthFactor":0.003}}}""" else ""
+        val prim = """{"attributes":{"POSITION":$pos,"NORMAL":$nrm,"TEXCOORD_0":$uv,"JOINTS_0":$jts,"WEIGHTS_0":$wts},"indices":$idx,"material":0,"targets":[${(1..targets).joinToString(",") { """{"POSITION":$morph}""" }}]}"""
         val json = """{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0,6]}],"nodes":$nodes,
-          "meshes":[{"primitives":[{"attributes":{"POSITION":$pos,"NORMAL":$nrm,"TEXCOORD_0":$uv,"JOINTS_0":$jts,"WEIGHTS_0":$wts},"indices":$idx,"material":0,"targets":[${(1..targets).joinToString(",") { """{"POSITION":$morph}""" }}]}]}],
+          "meshes":[{"primitives":[$prim${if (secondPrimitive) ",$prim" else ""}]}],
           "skins":[{"joints":[1],"inverseBindMatrices":$ib}],
           "materials":[{"name":"skin","pbrMetallicRoughness":{"baseColorFactor":[1,1,1,1]},"doubleSided":true}${if (vrm1) matExt.substring(0, 0) else ""}],
           "accessors":[${bin.accessors.joinToString(",")}],"bufferViews":[${bin.views.joinToString(",")}],"buffers":[{"byteLength":${bin.out.size()}}],$ext}"""
