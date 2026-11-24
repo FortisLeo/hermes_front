@@ -79,6 +79,32 @@ class AvatarLibraryViewModelTest {
         v.importFile("x.vrm", model("CC0")); advanceUntilIdle(); assertEquals(1, got.size); assertTrue(v.state.value.message!!.startsWith("Using"))
         v.importFile("y.vrm", byteArrayOf(1, 2)); advanceUntilIdle(); assertEquals(1, got.size); assertTrue(v.state.value.message!!.startsWith("Model rejected"))
     }
+    @Test fun emptyLibraryCallToActionOnlyAfterFirstRead() = runTest {
+        val v = vm(Src(model("CC0")))
+        assertTrue(!v.state.value.showEmptyLibrary)            // not known yet: no flash
+        advanceUntilIdle(); assertTrue(v.state.value.showEmptyLibrary)
+    }
+    @Test fun importFailureIsAnErrorThatStaysUntilDismissed() = runTest {
+        val v = vm(Src(model("CC0")))
+        v.importFile("y.vrm", byteArrayOf(1, 2)); advanceUntilIdle()
+        assertTrue(v.state.value.messageIsError); assertEquals(MessageKind.Error, v.state.value.messageKind)
+        v.consumeMessage(); assertTrue(!v.state.value.messageIsError)
+    }
+    @Test fun successfulImportIsASuccessMessageAndClearsOldError() = runTest {
+        val v = vm(Src(model("CC0")))
+        v.importFile("x.vrm", null); assertTrue(v.state.value.messageIsError)
+        v.importFile("x.vrm", model("CC0")); advanceUntilIdle()
+        assertEquals(MessageKind.Success, v.state.value.messageKind); assertTrue(!v.state.value.importing)
+    }
+    @Test fun removeAndRetryAnnounceAndBrokenCountDrops() = runTest {
+        val lib = FakeAvatarLibrary(listOf(
+            com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarEntry("a", "Fern", AvatarSource.UPLOAD, "CC0", "x", 10, 5, 512, 1, null, null, 1, 1, com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarStatus.BROKEN)))
+        val act = FakeActiveSlotStore()
+        val v = AvatarLibraryViewModel(Src(model("CC0")), AvatarInstaller { }, lib, act, SelectAvatar(lib, act) { 1L }, RemoveAvatar(lib, FakeAvatarFiles(), act)); advanceUntilIdle()
+        assertEquals(1, v.state.value.brokenCount)
+        v.retry("a"); advanceUntilIdle(); assertEquals("Trying 'Fern' again", v.state.value.message); assertEquals(0, v.state.value.brokenCount)
+        v.removeAvatar("a"); advanceUntilIdle(); assertEquals("Removed 'Fern'", v.state.value.message); assertEquals(MessageKind.Success, v.state.value.messageKind)
+    }
     @Test fun thumbnailsAreCached() = runTest {
         val src = Src(model("CC0")); val v = vm(src); v.thumbnail("https://x/t"); v.thumbnail("https://x/t"); assertEquals(1, src.thumbCalls); assertNull(v.thumbnail(""))
     }

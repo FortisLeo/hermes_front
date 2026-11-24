@@ -1,5 +1,6 @@
 package com.rishitgoklani.hermes_front_mobile.ui.settings
 
+import com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality
 import com.rishitgoklani.hermes_front_mobile.domain.HermesConfig
 import com.rishitgoklani.hermes_front_mobile.testing.FakeSettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +38,24 @@ class SettingsViewModelTest {
         assertEquals("secret", repo.config.first().apiKey)
         assertEquals("http://y", repo.config.first().baseUrl)
     }
+
+    @Test fun displayQualityDefaultsToAuto() { assertEquals(DisplayQuality.Auto, SettingsViewModel(FakeSettingsRepository()).state.value.displayQuality) }
+
+    @Test fun displayQualityIsPersistedAndExposed() = runBlocking {
+        val repo = FakeSettingsRepository(); val vm = SettingsViewModel(repo)
+        vm.onDisplayQuality(DisplayQuality.Low)
+        assertEquals(DisplayQuality.Low, vm.state.value.displayQuality)
+        assertEquals(DisplayQuality.Low, repo.displayQuality.first())
+    }
+
+    @Test fun displayQualityLoadsStoredChoice() = runBlocking {
+        val repo = FakeSettingsRepository(); repo.setDisplayQuality(DisplayQuality.High)
+        assertEquals(DisplayQuality.High, SettingsViewModel(repo).state.value.displayQuality)
+    }
+
+    @Test fun parseFallsBackToAuto() { assertEquals(DisplayQuality.Auto, DisplayQuality.parse("nonsense")); assertEquals(DisplayQuality.High, DisplayQuality.parse("high")) }
+
+    @Test fun aboutInfoIsExposed() { assertEquals("1.2", SettingsViewModel(FakeSettingsRepository(), AboutInfo("1.2", "debug")).state.value.about.versionName) }
 
     @Test fun editingClearsSavedFlag() {
         val vm = SettingsViewModel(FakeSettingsRepository())

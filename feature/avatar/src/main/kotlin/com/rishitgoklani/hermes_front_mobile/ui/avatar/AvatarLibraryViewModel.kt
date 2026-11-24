@@ -9,6 +9,7 @@ import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarEntry
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarLibrary
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSource
+import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarStatus
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.ImportProgress
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.RemoveAvatar
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.SelectAvatar
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class MessageKind { Info, Success, Error }
 
 data class AvatarLibraryState(
     val collections: List<CatalogCollection> = emptyList(),
@@ -37,7 +40,17 @@ data class AvatarLibraryState(
     val progress: ImportProgress? = null,
     /** One-shot result line for the user ("Using 'Devil'", "Model rejected: …"). */
     val message: String? = null,
+    /** Error messages stay on screen until dismissed; success/info messages fade on their own. */
+    val messageKind: MessageKind = MessageKind.Info,
+    /** False until the first read of the Room library, so the empty call-to-action does not flash while loading. */
+    val libraryReady: Boolean = false,
 ) {
+    /** The empty-library call-to-action (Upload / Catalog) is shown only once we know the library is empty and nothing is being imported. */
+    val showEmptyLibrary: Boolean get() = libraryReady && installed.isEmpty() && installingId == null
+    val importing: Boolean get() = installingId != null
+    /** Entries that still need a retry or removal. */
+    val brokenCount: Int get() = installed.count { it.status == AvatarStatus.BROKEN }
+    val messageIsError: Boolean get() = message != null && messageKind == MessageKind.Error
     val shown: List<CatalogAvatar> get() = OsaCatalog.search(avatars, query)
 }
 
@@ -49,7 +62,7 @@ class AvatarLibraryViewModel(
     private val _state = MutableStateFlow(AvatarLibraryState())
     val state: StateFlow<AvatarLibraryState> = _state
     init {
-        viewModelScope.launch { library.entries().collect { list -> _state.update { it.copy(installed = list) } } }
+        viewModelScope.launch { library.entries().collect { list -> _state.update { it.copy(installed = list, libraryReady = true) } } }
         viewModelScope.launch { active.slot().collect { slot -> _state.update { it.copy(activeSlot = slot) } } }
     }
     private val thumbs = object : LinkedHashMap<String, ByteArray?>(64, 0.75f, true) { override fun removeEldestEntry(e: MutableMap.MutableEntry<String, ByteArray?>) = size > 80 }
@@ -61,9 +74,9 @@ class AvatarLibraryViewModel(
         viewModelScope.launch {
             try {
                 val cols = source.collections()
-                _state.update { it.copy(collections = cols, loading = false, message = if (cols.isEmpty()) "Catalog is empty" else null) }
+                _state.update { it.copy(collections = cols, loading = false, message = if (cols.isEmpty()) "Catalog is empty" else null, messageKind = MessageKind.Info) }
                 cols.firstOrNull()?.let { select(it) }
-            } catch (e: CancellationException) { throw e } catch (e: Exception) { _state.update { it.copy(loading = false, message = "Catalog unavailable: ${e.message ?: "no network"}") } }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { _state.update { it.copy(loading = false, message = "Catalog unavailable: ${e.message ?: "no network"}", messageKind = MessageKind.Error) } }
         }
     }
 
@@ -71,7 +84,7 @@ class AvatarLibraryViewModel(
         _state.update { it.copy(collection = c, avatars = emptyList(), loading = true, message = null) }
         viewModelScope.launch {
             try { val list = source.avatars(c); _state.update { if (it.collection == c) it.copy(avatars = list, loading = false) else it } }
-            catch (e: CancellationException) { throw e } catch (e: Exception) { _state.update { it.copy(loading = false, message = "Could not load ${c.name}: ${e.message ?: "no network"}") } }
+            catch (e: CancellationException) { throw e } catch (e: Exception) { _state.update { it.copy(loading = false, message = "Could not load ${c.name}: ${e.message ?: "no network"}", messageKind = MessageKind.Error) } }
         }
     }
 
@@ -82,20 +95,20 @@ class AvatarLibraryViewModel(
         if (_state.value.installingId != null) return
         _state.update { it.copy(installingId = a.id, message = null) }
         viewModelScope.launch {
-            val msg = try { report(a.name, installer.install(source.download(a.modelUrl), true, a.name, AvatarSource.CATALOG, ::onProgress)) }
-            catch (e: CancellationException) { throw e } catch (e: Exception) { "Download failed: ${e.message ?: "no network"}" }
-            _state.update { it.copy(installingId = null, progress = null, message = msg) }
+            val out = try { report(a.name, installer.install(source.download(a.modelUrl), true, a.name, AvatarSource.CATALOG, ::onProgress)) }
+            catch (e: CancellationException) { throw e } catch (e: Exception) { Outcome("Download failed: ${e.message ?: "no network"}", MessageKind.Error) }
+            _state.update { it.copy(installingId = null, progress = null, message = out.text, messageKind = out.kind) }
         }
     }
 
     /** A file the user picked on the phone. [bytes] is null when it could not be read. */
     fun importFile(name: String, bytes: ByteArray?) {
-        if (bytes == null) { _state.update { it.copy(message = "Could not read $name") }; return }
-        if (bytes.size > VrmLicense.MAX_BYTES) { _state.update { it.copy(message = "Model rejected: larger than 50 MB") }; return }
+        if (bytes == null) { _state.update { it.copy(message = "Could not read $name", messageKind = MessageKind.Error) }; return }
+        if (bytes.size > VrmLicense.MAX_BYTES) { _state.update { it.copy(message = "Model rejected: larger than 50 MB", messageKind = MessageKind.Error) }; return }
         viewModelScope.launch {
-            _state.update { it.copy(installingId = IMPORT_ID) }
-            val msg = try { report(name, installer.install(bytes, false, name.removeSuffix(".vrm").removeSuffix(".VRM"), AvatarSource.UPLOAD, ::onProgress)) } catch (e: CancellationException) { throw e } catch (e: Exception) { "Import failed: ${e.message ?: "unknown error"}" }
-            _state.update { it.copy(installingId = null, progress = null, message = msg) }
+            _state.update { it.copy(installingId = IMPORT_ID, message = null) }
+            val out = try { report(name, installer.install(bytes, false, name.removeSuffix(".vrm").removeSuffix(".VRM"), AvatarSource.UPLOAD, ::onProgress)) } catch (e: CancellationException) { throw e } catch (e: Exception) { Outcome("Import failed: ${e.message ?: "unknown error"}", MessageKind.Error) }
+            _state.update { it.copy(installingId = null, progress = null, message = out.text, messageKind = out.kind) }
         }
     }
 
@@ -113,13 +126,15 @@ class AvatarLibraryViewModel(
     /** Show this slot (an installed avatar, or the eyes). */
     fun use(slot: AvatarSlot) { viewModelScope.launch { select(slot) } }
     /** A model marked BROKEN (the app died while it was loading) can be tried again: it becomes PENDING and is shown; if the app dies again it is marked BROKEN again. */
-    fun retry(id: String) { viewModelScope.launch { library.setStatus(id, com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarStatus.PENDING); select(AvatarSlot.Model(id)) } }
-    fun removeAvatar(id: String) { viewModelScope.launch { remove(id) } }
+    fun retry(id: String) { val name = nameOf(id); viewModelScope.launch { library.setStatus(id, AvatarStatus.PENDING); select(AvatarSlot.Model(id)); _state.update { it.copy(message = "Trying '$name' again", messageKind = MessageKind.Info) } } }
+    fun removeAvatar(id: String) { val name = nameOf(id); viewModelScope.launch { remove(id); _state.update { it.copy(message = "Removed '$name'", messageKind = MessageKind.Success) } } }
+    private fun nameOf(id: String) = _state.value.installed.firstOrNull { it.id == id }?.name ?: "avatar" 
     fun rename(id: String, name: String) { viewModelScope.launch { library.rename(id, name) } }
 
+    private class Outcome(val text: String, val kind: MessageKind)
     private fun report(name: String, r: InstallResult) = when (r) {
-        is InstallResult.Installed -> "Using '${r.info.title.ifEmpty { name }}' (${r.info.license})"
-        is InstallResult.Rejected -> "Model rejected: ${r.reason}"
+        is InstallResult.Installed -> Outcome("Using '${r.info.title.ifEmpty { name }}' (${r.info.license})", MessageKind.Success)
+        is InstallResult.Rejected -> Outcome("Model rejected: ${r.reason}", MessageKind.Error)
     }
 
     private companion object { const val IMPORT_ID = "__import__" }

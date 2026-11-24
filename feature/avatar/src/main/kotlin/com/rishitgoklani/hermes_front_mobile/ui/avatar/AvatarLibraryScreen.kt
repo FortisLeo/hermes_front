@@ -46,7 +46,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.CatalogAvatar
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarEntry
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot
@@ -69,6 +76,7 @@ fun AvatarLibraryScreen(
     onInstall: (CatalogAvatar) -> Unit,
     thumbnail: suspend (String) -> ByteArray?,
     modifier: Modifier = Modifier,
+    onDismissMessage: () -> Unit = {},
 ) {
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     var confirmRemove by remember { mutableStateOf<AvatarEntry?>(null) }
@@ -77,7 +85,7 @@ fun AvatarLibraryScreen(
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Library (${state.installed.size})") })
             Tab(selected = tab == 1, onClick = { tab = 1; onLoad() }, text = { Text("Catalog") })
         }
-        state.message?.let { Text(it, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodyMedium) }
+        state.message?.let { MessageBar(it, state.messageKind, onDismissMessage) }
         state.progress?.let { p ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(if (p.total > 0) "${p.stage} ${p.done}/${p.total}" else p.stage, style = MaterialTheme.typography.bodySmall)
@@ -86,12 +94,13 @@ fun AvatarLibraryScreen(
         }
         if (tab == 0) {
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onUpload, Modifier.weight(1f), enabled = state.installingId == null) { Text("Upload .vrm") }
-                OutlinedButton(onClick = { onUse(AvatarSlot.Eyes) }, Modifier.weight(1f), enabled = state.activeSlot != AvatarSlot.Eyes) { Text("Use eyes face") }
+                Button(onClick = onUpload, Modifier.weight(1f).heightIn(min = 48.dp), enabled = state.installingId == null) { Text(if (state.importing) "Importing…" else "Upload .vrm") }
+                OutlinedButton(onClick = { onUse(AvatarSlot.Eyes) }, Modifier.weight(1f).heightIn(min = 48.dp), enabled = state.activeSlot != AvatarSlot.Eyes) { Text("Use eyes face") }
             }
             Text("Swipe right to left on the face to switch between the eyes and your avatars.", Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (state.installed.isEmpty()) Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) { Text("No avatars yet. Upload a .vrm or pick one from the Catalog tab.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            else LazyVerticalGrid(GridCells.Adaptive(150.dp), Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!state.libraryReady) Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading your avatars" }) }
+            else if (state.showEmptyLibrary) EmptyLibrary(onUpload, onCatalog = { tab = 1; onLoad() })
+            else if (state.installed.isNotEmpty()) LazyVerticalGrid(GridCells.Adaptive(150.dp), Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.installed, key = { it.id }) { e -> InstalledCard(e, active = state.activeSlot == AvatarSlot.Model(e.id), onUse = { if (e.status == AvatarStatus.BROKEN) onRetry(e.id) else onUse(AvatarSlot.Model(e.id)) }, onRemove = { confirmRemove = e }) }
             }
         } else {
@@ -111,15 +120,37 @@ private fun InstalledCard(e: AvatarEntry, active: Boolean, onUse: () -> Unit, on
         value = e.thumbPath?.let { p -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(p)?.asImageBitmap() }.getOrNull() } }
     }
     Column(Modifier.clip(RoundedCornerShape(12.dp)).background(if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant).padding(6.dp)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(Color(0xFF11161C)).clickable(onClick = onUse), Alignment.Center) {
-            thumb?.let { Image(it, e.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } ?: Text(e.name.take(1).uppercase(), color = Color.Gray, style = MaterialTheme.typography.headlineLarge)
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(Color(0xFF11161C)).clickable(onClickLabel = if (e.status == AvatarStatus.BROKEN) "Retry ${e.name}" else "Use ${e.name}", role = Role.Button, onClick = onUse), Alignment.Center) {
+            thumb?.let { Image(it, "Preview of ${e.name}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } ?: Text(e.name.take(1).uppercase(), color = Color.Gray, style = MaterialTheme.typography.headlineLarge)
+            // The model is still being checked: spinner over the placeholder.
+            if (e.status == AvatarStatus.PENDING) CircularProgressIndicator(Modifier.semantics { contentDescription = "${e.name} is loading" })
         }
         Text(e.name, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        Text(statusLine(e, active), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+        Text(statusLine(e, active), style = MaterialTheme.typography.labelSmall, color = if (e.status == AvatarStatus.BROKEN) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = onUse, enabled = !active, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(if (active) "Showing" else if (e.status == AvatarStatus.BROKEN) "Retry" else "Use") }
-            TextButton(onClick = onRemove, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Remove", maxLines = 1) }
+            TextButton(onClick = onUse, Modifier.heightIn(min = 48.dp), enabled = !active, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(if (active) "Showing" else if (e.status == AvatarStatus.BROKEN) "Retry" else "Use") }
+            TextButton(onClick = onRemove, Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Remove ${e.name}" }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Remove", maxLines = 1) }
         }
+    }
+}
+
+/** Result line: errors (import failures) stay with a Dismiss button; successes fade on their own (the host clears them). Announced to screen readers. */
+@Composable
+private fun MessageBar(text: String, kind: MessageKind, onDismiss: () -> Unit) {
+    val container = when (kind) { MessageKind.Error -> MaterialTheme.colorScheme.errorContainer; MessageKind.Success -> MaterialTheme.colorScheme.primaryContainer; MessageKind.Info -> MaterialTheme.colorScheme.secondaryContainer }
+    Row(Modifier.fillMaxWidth().background(container).padding(start = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
+        Text(text, Modifier.weight(1f).padding(vertical = 12.dp), style = MaterialTheme.typography.bodyMedium)
+        if (kind == MessageKind.Error) TextButton(onClick = onDismiss, Modifier.heightIn(min = 48.dp)) { Text("Dismiss") }
+    }
+}
+
+@Composable
+private fun EmptyLibrary(onUpload: () -> Unit, onCatalog: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("No avatars yet", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+        Text("Give Deskbot a 3D face: upload a .vrm model from this phone, or browse free models in the catalog.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(onClick = onUpload, Modifier.heightIn(min = 48.dp)) { Text("Upload .vrm") }
+        OutlinedButton(onClick = onCatalog, Modifier.heightIn(min = 48.dp)) { Text("Browse catalog") }
     }
 }
 
@@ -140,7 +171,7 @@ private fun Catalog(state: AvatarLibraryState, onSelect: (com.rishitgoklani.herm
         }
         when {
             state.loading && state.avatars.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-            state.collections.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { OutlinedButton(onClick = onRetry) { Text("Retry") } }
+            state.collections.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { OutlinedButton(onClick = onRetry, Modifier.heightIn(min = 48.dp)) { Text("Retry loading the catalog") } }
             else -> LazyVerticalGrid(GridCells.Adaptive(110.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.shown, key = { it.id }) { a -> Card(a, installing = state.installingId == a.id, enabled = state.installingId == null, onClick = { onInstall(a) }, thumbnail = thumbnail) }
             }
@@ -153,10 +184,10 @@ private fun Card(a: CatalogAvatar, installing: Boolean, enabled: Boolean, onClic
     val img by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, a.thumbUrl) {
         value = thumbnail(a.thumbUrl)?.let { b -> runCatching { BitmapFactory.decodeByteArray(b, 0, b.size, BitmapFactory.Options().apply { inSampleSize = 2 })?.asImageBitmap() }.getOrNull() }
     }
-    Column(Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable(enabled = enabled, onClick = onClick).padding(6.dp)) {
+    Column(Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable(enabled = enabled, onClickLabel = "Install ${a.name}", role = Role.Button, onClick = onClick).padding(6.dp)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(Color(0xFF11161C)), Alignment.Center) {
-            img?.let { Image(it, a.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } ?: Text(a.name.take(1).uppercase(), color = Color.Gray, style = MaterialTheme.typography.headlineLarge)
-            if (installing) CircularProgressIndicator()
+            img?.let { Image(it, "Preview of ${a.name}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } ?: Text(a.name.take(1).uppercase(), color = Color.Gray, style = MaterialTheme.typography.headlineLarge)
+            if (installing) CircularProgressIndicator(Modifier.semantics { contentDescription = "Installing ${a.name}" })
         }
         Text(a.name, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1)
         Text(a.license, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

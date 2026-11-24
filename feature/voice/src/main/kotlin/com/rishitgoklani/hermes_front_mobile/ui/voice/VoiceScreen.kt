@@ -11,6 +11,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 @Composable
 fun VoiceScreen(
@@ -22,16 +30,16 @@ fun VoiceScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("State: ${state.bot}", style = MaterialTheme.typography.titleMedium)
+        Text("State: ${state.bot}", Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.titleMedium)
         if (state.heard.isNotEmpty()) Text("You: ${state.heard}")
         if (state.reply.isNotEmpty()) Text("Bot: ${state.reply}")
         if (state.timing.isNotEmpty()) Text(state.timing, style = MaterialTheme.typography.bodySmall)
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.error?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, color = MaterialTheme.colorScheme.error) }
         androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.Switch(wakeEnabled, onWakeToggle); Text("Always listening (\"hey bot\")")
+            androidx.compose.material3.Switch(wakeEnabled, onWakeToggle, Modifier.semantics { contentDescription = "Always listening for the wake word"; stateDescription = if (wakeEnabled) "on" else "off" }); Text("Always listening (\"hey bot\")")
         }
         if (wakeStatus.isNotBlank()) Text(wakeStatus, style = MaterialTheme.typography.bodySmall)
-        Button(onClick = onTalk) { Text("Talk") }
-        Button(onClick = onStop) { Text("Stop") }
+        Button(onClick = onTalk, Modifier.heightIn(min = 48.dp)) { Text("Talk") }
+        Button(onClick = onStop, Modifier.heightIn(min = 48.dp)) { Text("Stop") }
     }
 }

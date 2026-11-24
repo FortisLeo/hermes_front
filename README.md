@@ -78,6 +78,14 @@ The complete list, with the status of every one of the 384 catalogued features a
 **Hermes skills**
 - 384 skill sections in 30 skill folders (`hermes-skills/deskbot`), one per feature in `docs/Feature catalog.md`, each with the exact tools and a verify step.
 
+## First run and production polish
+- **First-run introduction** (skippable, shown once, replay from Settings): what Deskbot is, grouped permission explanations (microphone, camera, notifications) and a Hermes *Test connection* button.
+- **Last crash** in Debug: the app records uncaught exceptions to a size-capped file with secrets redacted; view, copy or clear it from the hidden menu.
+- **Avatar library states**: loading, empty (Upload / Browse catalog), inline import errors, BROKEN entries with Retry and Remove, success messages.
+- **Settings**: Display quality (Auto, Low, High) and an About block.
+- **Accessibility**: content descriptions, 48 dp targets, live announcements for mood and Hermes status, font-scale friendly.
+Details in [docs/SETUP.md](docs/SETUP.md).
+
 ## Quick start
 With a rooted phone that has Termux and Hermes, connected over adb:
 
