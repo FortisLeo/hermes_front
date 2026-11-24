@@ -124,7 +124,7 @@ class MainActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         val drawer = rememberDrawerState(DrawerValue.Closed)
         var section by remember { mutableStateOf<Section?>(Section.entries.firstOrNull { it.name.equals(intent?.getStringExtra("section"), true) }) }
-        val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
+        val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val liveSettings = container.liveSettingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
         val carousel = container.avatarCarouselViewModel(this)
         val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
         val viewerEvents = remember(carousel) { object : com.rishitgoklani.hermes_front_mobile.ui.avatar.ViewerEvents {
@@ -238,7 +238,7 @@ class MainActivity : ComponentActivity() {
                                         LaunchedEffect(lib.message) { if (lib.message != null && !lib.messageIsError) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
                                         com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, onUse = { slot -> library.use(slot); section = null }, onRetry = library::retry, onRemove = library::removeAvatar, onUpload = { pickVrm.launch(arrayOf("*/*")) },
                                             onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail, onDismissMessage = library::consumeMessage) }
-                                    Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save, onDisplayQuality = settings::onDisplayQuality, onShowIntro = { section = null; onboarding.replay() }) }
+                                    Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); val liveSt by liveSettings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save, onDisplayQuality = settings::onDisplayQuality, onShowIntro = { section = null; onboarding.replay() }, live = liveSt, liveActions = com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsActions(liveSettings::onEnabled, liveSettings::onApiKey, liveSettings::onModel, liveSettings::onVoice, liveSettings::onHalfDuplex, liveSettings::save)) }
                                 }
                             }
                         }

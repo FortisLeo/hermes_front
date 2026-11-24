@@ -3,6 +3,8 @@ package com.rishitgoklani.hermes_front_mobile
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import android.app.Application
 import androidx.lifecycle.ViewModel
@@ -81,7 +83,13 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     val hermes: HermesGateway = HermesClient({ current }, { "Current local date and time on the user's phone: " + com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.LocalTime.describe(java.time.ZonedDateTime.now()) })
     private val tts = AndroidSpeechSynthesizer(app)
     val speaker: SpeechSynthesizer get() = tts
-    val mouth: com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource get() = tts
+    // Gemini Live backend (optional): one streaming session instead of STT -> Hermes -> TTS. Settings (incl. the API key) live in DataStore only.
+    val liveSettings = com.rishitgoklani.hermes_front_mobile.data.live.LiveSettingsStore(app)
+    private val liveOut = com.rishitgoklani.hermes_front_mobile.data.live.AudioTrackLiveOutput(scope)
+    /** The mouth follows whichever voice is sounding: Android TTS word progress or the Live voice's loudness. */
+    val mouth: com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource = object : com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource {
+        override val openness: StateFlow<Float> = kotlinx.coroutines.flow.combine(tts.openness, liveOut.level) { a, b -> maxOf(a, b) }.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, 0f)
+    }
     /** Set by MainActivity while it exists; asks it to enter picture-in-picture. */
     @Volatile var pipRequest: (() -> Boolean)? = null
     val avatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarController()
@@ -112,7 +120,9 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     private val _theme = MutableStateFlow(PersonaTheme())
     val theme: StateFlow<PersonaTheme> = _theme
 
+    @Volatile private var activePersona: Persona? = null
     suspend fun applyPersona(p: Persona) {
+        activePersona = p
         face.resetTweaks(); face.tweak { p.tweaks() }; face.setMood(p.mood())
         tts.setVoice(p.voiceRate, p.voicePitch); _theme.value = p.theme
     }
@@ -131,7 +141,22 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     val runVoiceTurn = RunVoiceTurn(AndroidSpeechToText(app), hermes, tts, camera, { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }, audit = audit)
     private val loop = ConversationLoop(VoskKeywordSpotter(modelStore), runVoiceTurn, tts, VoiceLoopConfig(),
         onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") })
-    val wake: WakeController = WakeController(loop, scope, { prefs.edit().putBoolean("wake", it).apply() })
+    private val liveRun: com.rishitgoklani.hermes_front_mobile.domain.live.RunLiveSession by lazy {
+        val guard = { if (kill.isActive()) "Kill switch active: reset it on the phone" else null }
+        val tools = com.rishitgoklani.hermes_front_mobile.domain.live.LiveToolBridge(capabilities, runCapability, com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.HOT_TOOLS, denied = guard)
+        com.rishitgoklani.hermes_front_mobile.domain.live.RunLiveSession(
+            session = com.rishitgoklani.hermes_front_mobile.data.live.GeminiLiveClient(apiKey = { liveSettings.settings.first().apiKey }),
+            mic = com.rishitgoklani.hermes_front_mobile.data.live.AudioRecordLiveInput(), speaker = liveOut, tools = tools,
+            settings = { liveSettings.settings.first() },
+            prompt = { val p = activePersona; com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.build(p?.name ?: "Deskbot", p?.tone.orEmpty(), p?.description.orEmpty()) },
+            frame = { facing -> camera.capture(facing, 140_000) }, audit = audit)
+    }
+    private val liveLoop = com.rishitgoklani.hermes_front_mobile.domain.voice.LiveConversationLoop(VoskKeywordSpotter(modelStore), { liveRun }, VoiceLoopConfig(),
+        onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") })
+    val wake: WakeController = WakeController(
+        com.rishitgoklani.hermes_front_mobile.domain.voice.SwitchingVoiceLoop(loop, liveLoop, { liveSettings.settings.first().ready }), scope, { prefs.edit().putBoolean("wake", it).apply() })
+    // The backend is chosen when the loop starts, so switching it in Settings restarts a running loop.
+    init { scope.launch { liveSettings.settings.map { it.ready }.distinctUntilChanged().drop(1).collect { if (wake.enabled.value) { wake.stop(); wake.start() } } } }
     init { scope.launch { wake.events.collect { e -> if (e is com.rishitgoklani.hermes_front_mobile.domain.VoiceEvent.Expression) face.apply(e.expr) } } }
     fun showWhenLocked(): Boolean = prefs.getBoolean("show_locked", false)
     fun resumeWakeIfEnabled() { if (prefs.getBoolean("wake", false) && !kill.isActive() && !safeMode.value) wake.start(save = false) }
@@ -314,6 +339,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
 
     fun voiceViewModel(owner: ViewModelStoreOwner): VoiceViewModel = vm(owner) { VoiceViewModel(runVoiceTurn, face::apply) }
     fun chatViewModel(owner: ViewModelStoreOwner): ChatViewModel = vm(owner) { ChatViewModel(hermes, face::apply) }
+    fun liveSettingsViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsViewModel(liveSettings) }
     fun settingsViewModel(owner: ViewModelStoreOwner): SettingsViewModel = vm(owner) { SettingsViewModel(settings, com.rishitgoklani.hermes_front_mobile.ui.settings.AboutInfo(BuildConfig.VERSION_NAME, BuildConfig.BUILD_TYPE)) }
     fun onboardingViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingViewModel(settings, debugSource) }
     fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource, crashLog) }

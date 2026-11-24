@@ -35,12 +35,12 @@ class ConversationLoop(
     private val config: VoiceLoopConfig = VoiceLoopConfig(),
     private val onWake: () -> Unit = {},
     private val onKill: (String) -> Unit = {},
-) {
+) : VoiceLoop {
     private val _events = MutableSharedFlow<VoiceEvent>(extraBufferCapacity = 64)
-    val events: SharedFlow<VoiceEvent> = _events
+    override val events: SharedFlow<VoiceEvent> = _events
 
     /** Runs until cancelled. Failures of the mic or a turn are reported as Error state and retried with backoff. */
-    suspend fun run() {
+    override suspend fun run() {
         var failures = 0
         while (true) {
             try {

@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 
 /** Owns the lifecycle of the always-listening loop: start/stop, persisted preference, live bot state and forwarded events. */
 class WakeController(
-    private val loop: ConversationLoop,
+    private val loop: VoiceLoop,
     private val scope: CoroutineScope,
     private val persist: (Boolean) -> Unit = {},
     initiallyEnabled: Boolean = false,
