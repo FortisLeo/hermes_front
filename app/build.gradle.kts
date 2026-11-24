@@ -16,6 +16,8 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        // The target phone is arm64. Shipping x86/x86_64/armv7 copies of ML Kit and Vosk tripled the debug APK (53 MB -> 146 MB).
+        ndk { abiFilters += listOf("arm64-v8a") }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
