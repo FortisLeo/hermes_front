@@ -7,4 +7,4 @@ android {
 }
 // The OpenGL ES 3.0 side of the VRM engine: shaders, GPU upload, texture decoding and the GLSurfaceView. Everything that can be
 // tested without a GPU lives in :engine:vrm.
-dependencies { api(project(":engine:vrm")) }
+dependencies { api(project(":engine:vrm")); testImplementation(libs.junit) }

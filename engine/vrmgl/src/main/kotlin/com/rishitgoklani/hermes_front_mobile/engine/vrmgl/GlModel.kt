@@ -3,6 +3,7 @@ package com.rishitgoklani.hermes_front_mobile.engine.vrmgl
 import android.graphics.Bitmap
 import android.opengl.GLES30
 import android.opengl.GLUtils
+import android.os.Trace
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.AlphaMode
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.DrawItem
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.Pass
@@ -12,137 +13,243 @@ import com.rishitgoklani.hermes_front_mobile.engine.vrm.Rig
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.SpringSimulation
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmAsset
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmMaterial
-import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmPrimitive
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.math.Mat4
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import kotlin.math.pow
 
 /** Quality switches chosen per device. */
 data class EngineConfig(val outlines: Boolean = true, val springs: Boolean = true, val rgb565: Boolean = true)
 
-/** A model on the GPU plus its live rig, driver and physics. Create and release on the GL thread only. */
-internal class GlModel(val asset: VrmAsset, private val config: EngineConfig) {
+/**
+ * A model on the GPU plus its live rig, driver and physics. Create and release on the GL thread only.
+ * Shader variants come from [programs]; pass a shared [ProgramCache] to reuse compiled variants across models (it is then not released with the model).
+ */
+internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sharedPrograms: ProgramCache? = null) {
     val rig = Rig(asset); val driver = PoseDriver(rig); val springs = SpringSimulation(rig)
     val plan: List<DrawItem> = RenderPlan.build(asset, config.outlines)
     val maxJoints = asset.skins.maxOfOrNull { it.joints.size } ?: 0
-    private class Gpu(val vao: Int, val pos: Int, val attr: Int, val ibo: Int)
+    private val ownsPrograms = sharedPrograms == null
+    private val programs = sharedPrograms ?: ProgramCache()
+
+    /** Two position buffers (and VAOs) for morphing primitives: one is drawn while the other is written, so the driver never stalls on an in-flight buffer. */
+    private class Gpu(val vao: IntArray, val pos: IntArray, val attr: Int, val ibo: Int) { var cur = 0 }
     private val gpu = ArrayList<Gpu>(); private val textures = IntArray(asset.images.size)
-    private val skinRows = asset.skins.map { FloatArray(it.joints.size * 12) }; private val skinMat = asset.skins.map { FloatArray(it.joints.size * 16) }
+    private val skinRows = asset.skins.map { FloatArray(it.joints.size * 12) }
+    private val skinStamps = LongArray(asset.skins.size) { -1L }
+    private var texVersion = 0
+    private val materials = asset.materials.map { MaterialMath.compile(it) }
+    private val morphPrims: IntArray
+    private val morphRange = arrayOfNulls<IntArray>(asset.primitives.size)
     private val morphScratch: FloatBuffer
     private val morphWork: FloatArray
     private val nodeModel = FloatArray(16)
-    private var white = 0
+
+    // per-plan-item program cache, valid for one texVersion
+    private val itemProgram = arrayOfNulls<GlProgram>(plan.size)
+    private val itemFlags = IntArray(plan.size)
+    private var itemVersion = -1
+
+    // GL state tracked within one draw
+    private var curProgram: GlProgram? = null; private var curVao = -1; private var blendState = -1; private var cullState = -1
+    private val boundTex = IntArray(3); private var activeUnit = -1
+
+    private var pendingBytes = 0
+    /** Counters of the most recent [draw] (bytes include morph uploads since the previous draw). */
+    var lastDrawStats = DrawStats(); private set
 
     init {
-        val maxMorphVerts = asset.primitives.filter { it.morphBase != null }.maxOfOrNull { it.vertexCount } ?: 0
-        morphScratch = ByteBuffer.allocateDirect(maxMorphVerts * 12).order(ByteOrder.nativeOrder()).asFloatBuffer(); morphWork = FloatArray(maxMorphVerts * 3)
-        val ids = IntArray(1)
-        for (p in asset.primitives) {
-            GLES30.glGenVertexArrays(1, ids, 0); val vao = ids[0]; GLES30.glBindVertexArray(vao)
-            val bufs = IntArray(3); GLES30.glGenBuffers(3, bufs, 0)
-            p.positions.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bufs[0])
-            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * 12, p.positions, if (p.morphBase != null) GLES30.GL_DYNAMIC_DRAW else GLES30.GL_STATIC_DRAW)
-            GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
-            p.attributes.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bufs[1])
-            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * p.attributeStride, p.attributes, GLES30.GL_STATIC_DRAW)
+        Trace.beginSection("GlModel.init")
+        try {
+            val morphIdx = ArrayList<Int>()
+            for ((i, p) in asset.primitives.withIndex()) if (p.morphBase != null) { morphIdx += i; morphRange[i] = MorphMath.touchedRange(p.morphTargets) }
+            morphPrims = morphIdx.toIntArray()
+            val maxSpan = morphPrims.maxOfOrNull { val r = morphRange[it]; if (r == null) 0 else r[1] - r[0] + 1 } ?: 0
+            morphScratch = ByteBuffer.allocateDirect(maxSpan * 12).order(ByteOrder.nativeOrder()).asFloatBuffer(); morphWork = FloatArray(maxSpan * 3)
+            for (p in asset.primitives) gpu += upload(p)
+            GLES30.glBindVertexArray(0)
+            GlErrors.check("model upload")
+        } finally { Trace.endSection() }
+    }
+
+    private fun upload(p: com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmPrimitive): Gpu {
+        val morph = p.morphBase != null; val copies = if (morph) 2 else 1
+        val posBufs = IntArray(copies); GLES30.glGenBuffers(copies, posBufs, 0)
+        val other = IntArray(2); GLES30.glGenBuffers(2, other, 0); val attr = other[0]; val ibo = other[1]
+        for (b in posBufs) { p.positions.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, b)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * 12, p.positions, if (morph) GLES30.GL_DYNAMIC_DRAW else GLES30.GL_STATIC_DRAW) }
+        p.attributes.position(0); GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, attr)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, p.vertexCount * p.attributeStride, p.attributes, GLES30.GL_STATIC_DRAW)
+        p.indices.position(0); GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibo)
+        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, p.indices.remaining(), p.indices, GLES30.GL_STATIC_DRAW)
+        val vaos = IntArray(copies); GLES30.glGenVertexArrays(copies, vaos, 0)
+        for (c in 0 until copies) {
+            GLES30.glBindVertexArray(vaos[c])
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, posBufs[c]); GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, attr)
             GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribPointer(1, 4, GLES30.GL_BYTE, true, p.attributeStride, 0)
             GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 2, GLES30.GL_HALF_FLOAT, false, p.attributeStride, 4)
             if (p.skinned) {
                 GLES30.glEnableVertexAttribArray(3); GLES30.glVertexAttribIPointer(3, 4, GLES30.GL_UNSIGNED_BYTE, p.attributeStride, 8)
                 GLES30.glEnableVertexAttribArray(4); GLES30.glVertexAttribPointer(4, 4, GLES30.GL_UNSIGNED_BYTE, true, p.attributeStride, 12)
             }
-            p.indices.position(0); GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, bufs[2])
-            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, p.indices.remaining(), p.indices, GLES30.GL_STATIC_DRAW)
-            gpu += Gpu(vao, bufs[0], bufs[1], bufs[2])
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibo)
         }
-        GLES30.glBindVertexArray(0)
-        GLES30.glGenTextures(1, ids, 0); white = ids[0]; GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, white)
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, 1, 1, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.allocateDirect(4).put(byteArrayOf(-1, -1, -1, -1)).position(0))
+        return Gpu(vaos, posBufs, attr, ibo)
     }
 
-    /** Upload one decoded image. The caller recycles the bitmap right after. */
+    /**
+     * Upload one decoded image into immutable storage (RGB565 stays 565, everything else RGBA8) and build mipmaps.
+     * The caller recycles the bitmap right after.
+     */
     fun uploadTexture(image: Int, bmp: Bitmap) {
+        if (textures[image] != 0) GLES30.glDeleteTextures(1, intArrayOf(textures[image]), 0)
         val id = IntArray(1); GLES30.glGenTextures(1, id, 0); textures[image] = id[0]
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id[0])
-        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bmp, 0); GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+        val internal = if (bmp.config == Bitmap.Config.RGB_565) GLES30.GL_RGB565 else GLES30.GL_RGBA8
+        GLES30.glTexStorage2D(GLES30.GL_TEXTURE_2D, TextureMath.levels(bmp.width, bmp.height), internal, bmp.width, bmp.height)
+        GLUtils.texSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, 0, bmp); GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_NEAREST); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_REPEAT); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_REPEAT)
+        GlErrors.check("texture upload $image")
+        pendingBytes += bmp.byteCount; texVersion++
     }
 
-    /** Re-blends morph targets for meshes whose expression weights changed, straight into the position buffers. */
-    fun updateMorphs() {
-        if (rig.dirtyMeshes.isEmpty()) return
-        for ((i, p) in asset.primitives.withIndex()) {
-            val base = p.morphBase ?: continue; if (p.mesh !in rig.dirtyMeshes) continue
-            val w = rig.meshWeights[p.mesh] ?: continue
-            System.arraycopy(base, 0, morphWork, 0, base.size)
-            for ((t, target) in p.morphTargets.withIndex()) { val wt = w.getOrElse(t) { 0f }; if (wt == 0f) continue
-                for (k in target.vertices.indices) { val v = target.vertices[k] * 3; morphWork[v] += target.deltas[k * 3] * wt; morphWork[v + 1] += target.deltas[k * 3 + 1] * wt; morphWork[v + 2] += target.deltas[k * 3 + 2] * wt } }
-            morphScratch.clear(); morphScratch.put(morphWork, 0, base.size); morphScratch.position(0)
-            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, gpu[i].pos); GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, base.size * 4, morphScratch)
-        }
-        rig.dirtyMeshes.clear()
+    /** Compiles every shader variant this model will draw with (call after the textures are uploaded) so the first frame does not hitch. */
+    fun prewarm() { resolvePrograms() }
+
+    /**
+     * Re-blends morph targets for meshes whose expression weights changed. Only the vertex range the primitive's targets can touch is
+     * recomputed and uploaded, into the buffer that is not currently being drawn. Returns whether anything was uploaded.
+     */
+    fun updateMorphs(): Boolean {
+        if (rig.dirtyMeshes.isEmpty()) return false
+        Trace.beginSection("GlModel.morph")
+        var any = false
+        try {
+            for (i in morphPrims) {
+                val p = asset.primitives[i]; if (p.mesh !in rig.dirtyMeshes) continue
+                val range = morphRange[i] ?: continue; val w = rig.meshWeights[p.mesh] ?: continue
+                val base = p.morphBase ?: continue
+                val lo = range[0]; val n = (range[1] - lo + 1) * 3
+                System.arraycopy(base, lo * 3, morphWork, 0, n)
+                for ((t, target) in p.morphTargets.withIndex()) { val wt = w.getOrElse(t) { 0f }; if (wt == 0f) continue
+                    for (k in target.vertices.indices) { val v = (target.vertices[k] - lo) * 3
+                        morphWork[v] += target.deltas[k * 3] * wt; morphWork[v + 1] += target.deltas[k * 3 + 1] * wt; morphWork[v + 2] += target.deltas[k * 3 + 2] * wt } }
+                morphScratch.clear(); morphScratch.put(morphWork, 0, n); morphScratch.flip()
+                val g = gpu[i]; val next = 1 - g.cur
+                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, g.pos[next]); GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, lo * 12, n * 4, morphScratch)
+                g.cur = next; pendingBytes += n * 4; any = true
+            }
+            rig.dirtyMeshes.clear()
+        } finally { Trace.endSection() }
+        return any
     }
 
-    /** Skin matrices -> 3 row vectors per joint (a 3x4 matrix), the compact form the vertex shader reads. */
+    /** Skin matrices straight into 3 row vectors per joint (a 3x4 matrix, the form the vertex shader reads); no intermediate 4x4. */
     private fun prepareSkins() {
-        for (s in asset.skins.indices) {
-            rig.jointMatrices(s, skinMat[s]); val m = skinMat[s]; val r = skinRows[s]
-            for (j in 0 until asset.skins[s].joints.size) { val a = j * 16; val b = j * 12
-                r[b] = m[a]; r[b + 1] = m[a + 4]; r[b + 2] = m[a + 8]; r[b + 3] = m[a + 12]
-                r[b + 4] = m[a + 1]; r[b + 5] = m[a + 5]; r[b + 6] = m[a + 9]; r[b + 7] = m[a + 13]
-                r[b + 8] = m[a + 2]; r[b + 9] = m[a + 6]; r[b + 10] = m[a + 10]; r[b + 11] = m[a + 14] }
-        }
+        Trace.beginSection("GlModel.skins")
+        for (s in asset.skins.indices) { val skin = asset.skins[s]; SkinMath.packRows(rig.world, skin.joints, skin.inverseBind, skinRows[s]); skinStamps[s] = programs.counters.nextStamp() }
+        Trace.endSection()
     }
 
-    fun draw(vp: FloatArray, light: FloatArray, program: (skinned: Boolean) -> GlProgram) {
-        prepareSkins()
-        var current: GlProgram? = null; var blend = false; var culled = -1
-        for (item in plan) {
-            val p = asset.primitives[item.primitive]; val mat = asset.materials.getOrNull(p.material) ?: DEFAULT
-            val prog = program(p.skinned)
-            if (prog !== current) { prog.use(); current = prog
-                GLES30.glUniformMatrix4fv(prog.loc("uVP"), 1, false, vp, 0); GLES30.glUniform3fv(prog.loc("uLight"), 1, light, 0)
-                GLES30.glUniform1i(prog.loc("uBaseTex"), 0); GLES30.glUniform1i(prog.loc("uShadeTex"), 1); GLES30.glUniform1i(prog.loc("uEmTex"), 2) }
-            if (p.skinned) { System.arraycopy(rig.modelMatrix, 0, nodeModel, 0, 16); GLES30.glUniform4fv(prog.loc("uBones"), asset.skins[p.skin].joints.size * 3, skinRows[p.skin], 0) }
-            else Mat4.mul(rig.modelMatrix, 0, rig.world, p.node * 16, nodeModel, 0)
-            GLES30.glUniformMatrix4fv(prog.loc("uModel"), 1, false, nodeModel, 0)
-            val outline = item.pass == Pass.OUTLINE
-            val wantBlend = item.pass == Pass.BLEND
-            if (wantBlend != blend) { if (wantBlend) { GLES30.glEnable(GLES30.GL_BLEND); GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA); GLES30.glDepthMask(false) } else { GLES30.glDisable(GLES30.GL_BLEND); GLES30.glDepthMask(true) }; blend = wantBlend }
-            val cull = if (outline) 1 else if (mat.doubleSided) 0 else 2
-            if (cull != culled) { culled = cull; if (cull == 0) GLES30.glDisable(GLES30.GL_CULL_FACE) else { GLES30.glEnable(GLES30.GL_CULL_FACE); GLES30.glCullFace(if (cull == 1) GLES30.GL_FRONT else GLES30.GL_BACK) } }
-            var flags = 0
-            val bt = tex(mat.baseImage); val st = tex(mat.shadeImage); val et = tex(mat.emissiveImage)
-            if (bt != 0) flags = flags or Shaders.FLAG_BASE_TEX; if (st != 0) flags = flags or Shaders.FLAG_SHADE_TEX; if (et != 0) flags = flags or Shaders.FLAG_EMISSIVE_TEX
-            if (mat.unlit) flags = flags or Shaders.FLAG_UNLIT; if (mat.alphaMode == AlphaMode.MASK) flags = flags or Shaders.FLAG_MASK; if (outline) flags = flags or Shaders.FLAG_OUTLINE
-            GLES30.glUniform1i(prog.loc("uFlags"), flags); GLES30.glUniform1f(prog.loc("uOutline"), if (outline) mat.outlineWidth else 0f)
-            GLES30.glUniform4f(prog.loc("uBase"), g(mat.baseColor[0]), g(mat.baseColor[1]), g(mat.baseColor[2]), mat.baseColor[3])
-            GLES30.glUniform3f(prog.loc("uShade"), g(mat.shadeColor[0]), g(mat.shadeColor[1]), g(mat.shadeColor[2]))
-            GLES30.glUniform3f(prog.loc("uEmissive"), g(mat.emissive[0]), g(mat.emissive[1]), g(mat.emissive[2]))
-            GLES30.glUniform3f(prog.loc("uOutlineColor"), g(mat.outlineColor[0]), g(mat.outlineColor[1]), g(mat.outlineColor[2]))
-            GLES30.glUniform1f(prog.loc("uShift"), mat.shadeShift); GLES30.glUniform1f(prog.loc("uToony"), mat.shadeToony); GLES30.glUniform1f(prog.loc("uCutoff"), mat.cutoff)
-            bind(0, if (bt != 0) bt else white); bind(1, if (st != 0) st else white); bind(2, if (et != 0) et else white)
-            GLES30.glBindVertexArray(gpu[item.primitive].vao)
-            GLES30.glDrawElements(GLES30.GL_TRIANGLES, p.indexCount, if (p.indicesAreInt) GLES30.GL_UNSIGNED_INT else GLES30.GL_UNSIGNED_SHORT, 0)
+    private fun resolvePrograms() {
+        for ((idx, item) in plan.withIndex()) {
+            val p = asset.primitives[item.primitive]; val mat = material(p.material)
+            var flags = mat.staticFlags
+            if (item.pass == Pass.OUTLINE) flags = (flags and ShaderSources.FLAG_MASK) or ShaderSources.FLAG_OUTLINE
+            if (tex(mat.baseImage) != 0) flags = flags or ShaderSources.FLAG_BASE_TEX
+            if (tex(mat.shadeImage) != 0) flags = flags or ShaderSources.FLAG_SHADE_TEX
+            if (tex(mat.emissiveImage) != 0) flags = flags or ShaderSources.FLAG_EMISSIVE_TEX
+            flags = ShaderSources.normalize(flags); itemFlags[idx] = flags
+            itemProgram[idx] = programs.get(flags, p.skinned, maxJoints)
         }
-        if (blend) { GLES30.glDisable(GLES30.GL_BLEND); GLES30.glDepthMask(true) }
-        GLES30.glBindVertexArray(0)
+        itemVersion = texVersion
     }
 
+    /**
+     * Draws the plan. [poseChanged] = false skips recomputing and re-uploading skin matrices (use when the rig world matrices
+     * are unchanged since the previous draw). The first draw always computes them.
+     */
+    fun draw(vp: FloatArray, light: FloatArray, poseChanged: Boolean = true) {
+        Trace.beginSection("GlModel.draw")
+        try {
+            val uniformsBefore = programs.counters.uniformCalls
+            if (poseChanged || skinStamps.any { it < 0 }) prepareSkins()
+            if (itemVersion != texVersion) resolvePrograms()
+            curProgram = null; curVao = -1; blendState = -1; cullState = -1; activeUnit = -1; boundTex.fill(-1)
+            GLES30.glDisable(GLES30.GL_BLEND); GLES30.glDepthMask(true); blendState = 0
+            var calls = 0; var bytes = pendingBytes; pendingBytes = 0
+            for ((idx, item) in plan.withIndex()) {
+                val p = asset.primitives[item.primitive]; val mat = material(p.material)
+                val prog = itemProgram[idx]!!; val flags = itemFlags[idx]
+                if (prog !== curProgram) { prog.use(); curProgram = prog }
+                prog.setMat4(ShaderSources.U_VP, vp); prog.setVec3(ShaderSources.U_LIGHT, light)
+                val outline = item.pass == Pass.OUTLINE
+                if (p.skinned) {
+                    prog.setMat4(ShaderSources.U_MODEL, rig.modelMatrix)
+                    val stamp = skinStamps[p.skin]
+                    if (prog.boneStamp != stamp) { val j = asset.skins[p.skin].joints.size; prog.setBones(skinRows[p.skin], j); prog.boneStamp = stamp; bytes += j * 48 }
+                } else { Mat4.mul(rig.modelMatrix, 0, rig.world, p.node * 16, nodeModel, 0); prog.setMat4(ShaderSources.U_MODEL, nodeModel) }
+                if (outline) { prog.setVec3(ShaderSources.U_OUTLINE_COLOR, mat.outlineColor); prog.setFloat(ShaderSources.U_OUTLINE, mat.outlineWidth) }
+                else {
+                    prog.setVec4(ShaderSources.U_BASE, mat.base); prog.setVec3(ShaderSources.U_SHADE, mat.shade); prog.setVec3(ShaderSources.U_EMISSIVE, mat.emissive)
+                    prog.setFloat(ShaderSources.U_SHIFT, mat.shift); prog.setFloat(ShaderSources.U_TOONY, mat.edge)
+                }
+                prog.setFloat(ShaderSources.U_CUTOFF, mat.cutoff)
+                if (outline) prog.setVec4(ShaderSources.U_BASE, mat.base)
+                setBlend(item.pass == Pass.BLEND)
+                setCull(if (outline) 1 else if (mat.doubleSided) 0 else 2)
+                if (flags and ShaderSources.FLAG_BASE_TEX != 0) bind(0, tex(mat.baseImage))
+                if (flags and ShaderSources.FLAG_SHADE_TEX != 0) bind(1, tex(mat.shadeImage))
+                if (flags and ShaderSources.FLAG_EMISSIVE_TEX != 0) bind(2, tex(mat.emissiveImage))
+                val g = gpu[item.primitive]; val vao = g.vao[g.cur]
+                if (vao != curVao) { GLES30.glBindVertexArray(vao); curVao = vao }
+                GLES30.glDrawElements(GLES30.GL_TRIANGLES, p.indexCount, if (p.indicesAreInt) GLES30.GL_UNSIGNED_INT else GLES30.GL_UNSIGNED_SHORT, 0); calls++
+            }
+            if (blendState == 1) { GLES30.glDisable(GLES30.GL_BLEND); GLES30.glDepthMask(true) }
+            GLES30.glBindVertexArray(0)
+            GlErrors.check("draw")
+            lastDrawStats = DrawStats(calls, programs.counters.uniformCalls - uniformsBefore, bytes)
+        } finally { Trace.endSection() }
+    }
+
+    private fun material(i: Int): GlMaterial = materials.getOrNull(i) ?: DEFAULT
+    private fun setBlend(on: Boolean) {
+        val want = if (on) 1 else 0; if (want == blendState) return
+        if (on) { GLES30.glEnable(GLES30.GL_BLEND); GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA); GLES30.glDepthMask(false) } else { GLES30.glDisable(GLES30.GL_BLEND); GLES30.glDepthMask(true) }
+        blendState = want
+    }
+    private fun setCull(cull: Int) {
+        if (cull == cullState) return; cullState = cull
+        if (cull == 0) GLES30.glDisable(GLES30.GL_CULL_FACE) else { GLES30.glEnable(GLES30.GL_CULL_FACE); GLES30.glCullFace(if (cull == 1) GLES30.GL_FRONT else GLES30.GL_BACK) }
+    }
     private fun tex(i: Int) = if (i in textures.indices) textures[i] else 0
-    private fun bind(unit: Int, id: Int) { GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id) }
-    /** Colours in glTF are linear; the shader works in the display's gamma space, so convert once here. */
-    private fun g(c: Float) = c.coerceIn(0f, 1f).pow(1f / 2.2f)
+    private fun bind(unit: Int, id: Int) {
+        if (boundTex[unit] == id) return
+        if (activeUnit != unit) { GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit); activeUnit = unit }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id); boundTex[unit] = id
+    }
+
+    /** Source-compatible overload for the old view: the program lambda is ignored, variants are chosen per material. */
+    @Deprecated("Use draw(vp, light, poseChanged)")
+    fun draw(vp: FloatArray, light: FloatArray, program: (skinned: Boolean) -> GlProgram) = draw(vp, light, true)
 
     fun release() {
-        for (g in gpu) { GLES30.glDeleteVertexArrays(1, intArrayOf(g.vao), 0); GLES30.glDeleteBuffers(3, intArrayOf(g.pos, g.attr, g.ibo), 0) }
-        gpu.clear(); GLES30.glDeleteTextures(textures.size, textures, 0); GLES30.glDeleteTextures(1, intArrayOf(white), 0)
+        for (g in gpu) { GLES30.glDeleteVertexArrays(g.vao.size, g.vao, 0); GLES30.glDeleteBuffers(g.pos.size, g.pos, 0); GLES30.glDeleteBuffers(2, intArrayOf(g.attr, g.ibo), 0) }
+        gpu.clear(); GLES30.glDeleteTextures(textures.size, textures, 0)
+        if (ownsPrograms) programs.release()
     }
 
     companion object {
-        private val DEFAULT = VrmMaterial("default", floatArrayOf(1f, 1f, 1f, 1f), floatArrayOf(.8f, .8f, .8f), -1, -1, floatArrayOf(0f, 0f, 0f), -1, AlphaMode.OPAQUE, .5f, false, 0f, .9f, 0f, floatArrayOf(0f, 0f, 0f), false)
+        private val DEFAULT = MaterialMath.compile(VrmMaterial("default", floatArrayOf(1f, 1f, 1f, 1f), floatArrayOf(.8f, .8f, .8f), -1, -1, floatArrayOf(0f, 0f, 0f), -1, AlphaMode.OPAQUE, .5f, false, 0f, .9f, 0f, floatArrayOf(0f, 0f, 0f), false))
+    }
+}
+
+internal object GlErrors {
+    /** Throws a descriptive exception when the GL error flag is set. */
+    fun check(what: String) {
+        val e = android.opengl.GLES30.glGetError()
+        if (e != 0) throw IllegalStateException("GL error 0x${Integer.toHexString(e)} during $what")
     }
 }
