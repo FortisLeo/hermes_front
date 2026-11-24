@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
             override fun onShown(key: String, ms: Long, wasStaged: Boolean) = carousel.onShown(key, ms, wasStaged)
             override fun onStaged(key: String, ms: Long) = carousel.onStaged(key, ms)
             override fun onError(key: String, message: String) = carousel.onError(key, message)
+            override fun onFatal(message: String) = carousel.onFatal(message)
             override fun onNodes(names: List<String>) = container.avatar.setNodes(names)
             override fun onHead(x: Float, y: Float, size: Float) { head.value = Triple(x, y, size) }
         } }

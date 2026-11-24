@@ -98,7 +98,6 @@ class VrmGlView(
     private val specs = HashMap<String, ModelSpec>()
     private var lastWantActive: ModelSpec? = null; private var lastWantStaged: ModelSpec? = null
 
-    private val programs = HashMap<Int, GlProgram>()   // key: 0 = static, otherwise max joints of the skinned program
     private val vp = FloatArray(16); private val proj = FloatArray(16); private val viewM = FloatArray(16)
     private val light = floatArrayOf(0.4264f, 0.8528f, 0.4264f)
     private var framing: Framing? = null
@@ -186,7 +185,7 @@ class VrmGlView(
         setRenderer(object : Renderer {
             override fun onSurfaceCreated(gl: GL10?, c: EGLConfig?) {
                 try {
-                    programs.clear(); val v = IntArray(1); GLES30.glGetIntegerv(GLES30.GL_MAX_VERTEX_UNIFORM_VECTORS, v, 0); uniformLimit = v[0]
+                    val v = IntArray(1); GLES30.glGetIntegerv(GLES30.GL_MAX_VERTEX_UNIFORM_VECTORS, v, 0); uniformLimit = v[0]
                     GLES30.glClearColor(BG_R, BG_G, BG_B, 1f); GLES30.glEnable(GLES30.GL_DEPTH_TEST)
                     val gen = ++glGeneration; if (gen > 1) main.post { reloadAfterContextLoss() }
                 } catch (t: Throwable) { fatal("GL setup failed: ${t.message}", t) }
@@ -268,7 +267,6 @@ class VrmGlView(
         released = true; running = false; paused = true
         stopLoop(); main.removeCallbacksAndMessages(null)
         slots.releaseAll(); active = null; queue.clear(); thumbRequest?.let { (_, cb) -> thumbRequest = null; cb(null) }
-        queueEvent { runCatching { programs.values.forEach { it.delete() }; programs.clear() } }
         loader.shutdownNow()
     }
 
@@ -293,7 +291,7 @@ class VrmGlView(
                 op.check()
                 val glb = Glb.open(spec.file); val asset = VrmParser.parse(glb)
                 if (asset.skins.any { it.joints.size * 3 + 24 > uniformLimit }) throw IllegalStateException("This GPU cannot skin a model with that many joints")
-                val m = onGl(op) { GlModel(asset, config) }; model = m
+                val m = onGl(op) { GlModel(asset, config) }; model = m; onGl(op) { m.prewarm() }
                 m.driver.clipSource = clipSource
                 val res = Resident(m, glb, spec); residents.add(res)
                 if (withTextures) loadTextures(res, op)
@@ -346,11 +344,6 @@ class VrmGlView(
     }
 
     // ---- drawing (GL thread) ----
-    private fun program(skinned: Boolean, maxJoints: Int): GlProgram {
-        val key = if (skinned) maxOf(1, maxJoints) else 0
-        return programs.getOrPut(key) { GlProgram(Shaders.vertex(skinned, maxJoints), Shaders.FRAGMENT) }
-    }
-
     private fun drawFrame() {
         if (dead || released) return
         try {
@@ -362,7 +355,7 @@ class VrmGlView(
                 m.driver.frame(dt, SystemClock.uptimeMillis(), input); m.rig.update(); if (config.springs) m.springs.step(dt)
                 m.updateMorphs()
                 Mat4.perspective(f.fovY, width.toFloat() / height, 0.1f, 20f, proj); Mat4.lookAt(f.eyeX, f.eyeY, f.eyeZ, f.targetX, f.targetY, f.targetZ, viewM); Mat4.mul(proj, 0, viewM, 0, vp, 0)
-                m.draw(vp, light) { skinned -> program(skinned, m.maxJoints) }
+                m.draw(vp, light, poseChanged = true)
                 if (++headTick % 6 == 0) reportHead(m, f)
             }
             thumbRequest?.let { (size, cb) -> thumbRequest = null; cb2(size, cb) }
