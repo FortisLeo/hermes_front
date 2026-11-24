@@ -22,6 +22,8 @@ import androidx.lifecycle.LifecycleOwner
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarState
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.DeviceTextureBudget
 import com.rishitgoklani.hermes_front_mobile.engine.vrmgl.ModelSpec
+import com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality
+import com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel
 import com.rishitgoklani.hermes_front_mobile.engine.vrmgl.VrmEvents
 import com.rishitgoklani.hermes_front_mobile.engine.vrmgl.VrmGlView
 import java.io.File
@@ -33,7 +35,7 @@ import java.io.File
 @Composable
 fun AvatarView(
     state: AvatarState, clipsDir: File, libraryDir: File, active: ModelRequest?, staged: ModelRequest?, events: ViewerEvents,
-    modifier: Modifier = Modifier, snapshots: AvatarSnapshots? = null,
+    modifier: Modifier = Modifier, snapshots: AvatarSnapshots? = null, displayQuality: DisplayQuality = DisplayQuality.Auto,
 ) {
     val ev = rememberUpdatedState(events)
     var view by remember { mutableStateOf<VrmGlView?>(null) }
@@ -87,3 +89,6 @@ private fun deviceTextureBudget(ctx: Context): Long {
     val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val info = ActivityManager.MemoryInfo(); am.getMemoryInfo(info)
     return DeviceTextureBudget.bytes(info.totalMem, am.isLowRamDevice)
 }
+
+/** Settings choice -> renderer level. Pure, so it is unit-tested. */
+internal fun renderLevel(q: DisplayQuality): QualityLevel = when (q) { DisplayQuality.Low -> QualityLevel.Low; DisplayQuality.High -> QualityLevel.High; DisplayQuality.Auto -> QualityLevel.Auto }

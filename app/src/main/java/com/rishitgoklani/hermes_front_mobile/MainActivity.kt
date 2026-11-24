@@ -190,9 +190,12 @@ class MainActivity : ComponentActivity() {
                 // Screen readers: announces mood / bot state / Hermes connection changes without drawing anything.
                 Box(Modifier.size(1.dp).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = "Deskbot is ${bot.name.lowercase()}, mood ${face.mood.name.lowercase()}. $hermesLine".trim() })
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
+                val settingsUi by settings.state.collectAsStateWithLifecycle()
+                val renderQuality = settingsUi.displayQuality
                 FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
-                        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots)
+                        // A new quality level rebuilds the GL view so the new switches (outlines, physics, texture format) take effect.
+                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality) }
                         // While the viewer is still loading the model (e.g. coming from the eyes) the eyes stay on screen, then fade out.
                         androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))) {
                             com.rishitgoklani.hermes_front_mobile.ui.face.FaceView(bot, face, Modifier.fillMaxSize(), mouth = mouth, backgroundColor = background)

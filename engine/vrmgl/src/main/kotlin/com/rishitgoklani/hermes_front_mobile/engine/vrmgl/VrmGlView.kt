@@ -71,10 +71,16 @@ class VrmGlView(
     companion object {
         private const val TAG = "DeskbotVrmGl"
         /** Low-RAM phones get 16-bit textures and no outline pass. */
+        /** Config for the user's Display quality choice on this device. */
+        fun configFor(context: Context, level: QualityLevel): EngineConfig {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val info = ActivityManager.MemoryInfo(); am.getMemoryInfo(info)
+            return QualityPresets.resolve(level, am.isLowRamDevice, info.totalMem)
+        }
+
         fun defaultConfig(context: Context): EngineConfig {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val info = ActivityManager.MemoryInfo(); am.getMemoryInfo(info)
             val lowRam = am.isLowRamDevice || info.totalMem < 4L * 1024 * 1024 * 1024
-            return EngineConfig(outlines = !am.isLowRamDevice, springs = true, rgb565 = lowRam)
+            return QualityPresets.resolve(QualityLevel.Auto, am.isLowRamDevice, info.totalMem)
         }
         /** Per-device texture budget: a 80th of RAM clamped to 24..96 MB, halved on low-RAM devices. */
         fun defaultTextureBudget(context: Context): Long {

@@ -29,4 +29,10 @@ class EngineInputMapperTest {
         assertEquals(2, a.keyframes.size); assertEquals(800L, a.keyframes[1].tMs); assertEquals(true, a.loop)
         assertArrayEquals(floatArrayOf(0f, 0f, 1f), a.keyframes[1].pose.bones["spine"]!!, 0f)
     }
+
+    @Test fun displayQualityMapsToTheRendererLevels() {
+        assertEquals(com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel.Low, renderLevel(com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality.Low))
+        assertEquals(com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel.High, renderLevel(com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality.High))
+        assertEquals(com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel.Auto, renderLevel(com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality.Auto))
+    }
 }
