@@ -22,7 +22,7 @@ Ladder: `deskbot_ui_tree` (cheapest, exact) > `deskbot_screenshot` + vision mode
 `deskbot_ui_tree max_nodes=200` returns `[i] Class "label" id=… (cx,cy) flags`. For raw XML with bounds fall back to `deskbot_shell cmd="uiautomator dump /sdcard/ui.xml && cat /sdcard/ui.xml"`.
 
 ### 43 OCR of screen text
-`deskbot_screenshot` then ask the vision model to transcribe the text. For batch OCR in Termux: `tesseract` (pkg install tesseract) on a saved screenshot (`screencap -p /sdcard/s.png`).
+`deskbot_ocr` (on-device, no network) reads the current screen and returns `data.text` plus per-line boxes; it works in apps that hide their accessibility tree and on video frames. `deskbot_ocr source=camera facing=front|back` reads text through a camera instead (front is the default camera). Fall back to `deskbot_screenshot` + vision for handwriting or non-Latin scripts.
 
 ### 44 Locate an element
 By text/id/desc: `deskbot_ui_click` selectors find it (use `ui_tree` to inspect first). By visual description ("the blue button"): `deskbot_screenshot`, locate with vision, then `deskbot_ui_click x= y=` (scale coords: screenshot is ≤960px wide, use `deskbot_screen_state` width/height to convert).
@@ -34,7 +34,7 @@ By text/id/desc: `deskbot_ui_click` selectors find it (use `ui_tree` to inspect 
 `deskbot_ui_wait_for text=<t> [gone=true] timeout_ms=…` for text. To watch a region/page: loop `deskbot_screenshot` every few seconds and diff with vision; announce when changed (cap the loop; use cron for long watches).
 
 ### 47 Read charts and tables on screen
-`deskbot_screenshot` + vision: "convert the table to CSV" / "describe the chart trend". Save CSV with `deskbot_file_write`.
+Tables: `deskbot_table_to_csv` (screen by default, `source=camera facing=front|back` for a printed table) returns `data.csv`; save it with `deskbot_file_write`. Charts: `deskbot_table_to_csv include_image=true` returns the axis/label text in `data.text` plus the picture in `data.image_base64`; describe the trend from the image with vision and quote the exact numbers from the text.
 
 ### 48 Foreground app detection
 `deskbot_screen_state` (package). Details: `dumpsys window | grep -E "mCurrentFocus|mFocusedApp"`; split-screen: `dumpsys activity activities | grep -i "windowing mode"`.

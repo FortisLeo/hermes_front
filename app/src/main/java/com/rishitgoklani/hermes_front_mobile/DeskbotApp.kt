@@ -165,7 +165,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
 
     private val macroStore = com.rishitgoklani.hermes_front_mobile.data.events.FileMacroStore(File(app.filesDir, "macros.json"))
     val macros = com.rishitgoklani.hermes_front_mobile.domain.macro.MacroRecorder(onChange = macroStore::save).also { it.load(macroStore.load()) }
-    private val visualWatcher = com.rishitgoklani.hermes_front_mobile.data.capabilities.VisualWatcher(camera, scope) { score -> audit.record("visual_change", score.toString(), "event"); engine.onEvent(DeviceEvent.VisualChange(score)) }
+    private val visualWatcher = com.rishitgoklani.hermes_front_mobile.data.capabilities.AndroidFrameThumbnailer().let { thumbs -> com.rishitgoklani.hermes_front_mobile.domain.sense.VisualWatcher(camera, thumbs, scope, diagnostics = { android.util.Log.d("DeskbotVisual", it) }) { score, _ -> audit.record("visual_change", score.toString(), "event"); engine.onEvent(DeviceEvent.VisualChange(score)) } }
     private val soundWatcher = com.rishitgoklani.hermes_front_mobile.data.capabilities.SoundWatcher(scope, { runCatching { com.rishitgoklani.hermes_front_mobile.data.capabilities.soundLevelCapability().executor.execute(kotlinx.serialization.json.JsonObject(emptyMap())).data?.get("peak_dbfs")?.let { (it as kotlinx.serialization.json.JsonPrimitive).content.toDouble() } }.getOrNull() }) { label, db -> audit.record("sound_spike", "$label $db", "event"); engine.onEvent(DeviceEvent.Sound(label, db)) }
 
     // Generative UI
@@ -179,7 +179,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
         { surface -> _screenRequests.tryEmit(surface); runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
         Triple({ prefs.getBoolean("show_locked", false) }, { v: Boolean -> prefs.edit().putBoolean("show_locked", v).apply() }, { runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }),
         macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }, avatarCatalog = avatarCatalog, avatarInstaller = avatarInstaller,
-        avatarLibraryTool = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.avatarLibraryCapability(avatarLibrary, avatarSlot, selectAvatar, cycleAvatar, removeAvatar)))
+        avatarLibraryTool = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.avatarLibraryCapability(avatarLibrary, avatarSlot, selectAvatar, cycleAvatar, removeAvatar), video = camera))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
     val engine = RoutineEngine(routines, runCapability, audit = audit)

@@ -7,6 +7,13 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -15,22 +22,52 @@ import androidx.lifecycle.LifecycleRegistry
 import com.rishitgoklani.hermes_front_mobile.domain.CameraFacing
 import com.rishitgoklani.hermes_front_mobile.domain.CameraPort
 import com.rishitgoklani.hermes_front_mobile.domain.QualityPlanner
+import android.os.Environment
+import com.rishitgoklani.hermes_front_mobile.domain.vision.RecordedClip
+import com.rishitgoklani.hermes_front_mobile.domain.vision.VideoRecorderPort
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** CameraX adapter: binds briefly to a private lifecycle, grabs one frame, releases the camera, shrinks the JPEG. */
-class CameraXCameraPort(private val context: Context, private val longSide: Int = 1024) : CameraPort {
+class CameraXCameraPort(private val context: Context, private val longSide: Int = 1024) : CameraPort, VideoRecorderPort {
     private val mutex = Mutex() // one capture at a time; the camera is a shared resource
 
-    override suspend fun capture(facing: CameraFacing, maxBytes: Int): ByteArray = mutex.withLock {
+    override suspend fun capture(facing: CameraFacing, maxBytes: Int, longSidePx: Int?): ByteArray = mutex.withLock {
         val frame = withContext(Dispatchers.Main) { takeFrame(facing) }
-        withContext(Dispatchers.Default) { shrink(frame, maxBytes) }
+        withContext(Dispatchers.Default) { shrink(frame, maxBytes, longSidePx ?: longSide) }
+    }
+
+    /** Records [durationMs] of video from the chosen camera into Deskbot/videos (or app files if shared storage is not writable). Holds the same lock as stills. */
+    override suspend fun record(facing: CameraFacing, durationMs: Long, withAudio: Boolean, session: String): RecordedClip = mutex.withLock {
+        val dir = File(Environment.getExternalStorageDirectory(), "Deskbot/videos").let { if (it.isDirectory || it.mkdirs()) it else File(context.filesDir, "videos").also { d -> d.mkdirs() } }
+        val file = File(dir, "$session.mp4")
+        withContext(Dispatchers.Main) {
+            val provider = awaitProvider()
+            val owner = SimpleOwner().also { it.resume() }
+            val recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD))).build()
+            val capture = VideoCapture.withOutput(recorder)
+            val selector = if (facing == CameraFacing.Front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+            try {
+                provider.unbindAll(); provider.bindToLifecycle(owner, selector, capture)
+                val finished = CompletableDeferred<VideoRecordEvent.Finalize>()
+                var pending = recorder.prepareRecording(context, FileOutputOptions.Builder(file).build())
+                if (withAudio) pending = pending.withAudioEnabled()
+                val active = pending.start(ContextCompat.getMainExecutor(context)) { ev -> if (ev is VideoRecordEvent.Finalize) finished.complete(ev) }
+                try { delay(durationMs) } finally { active.stop() }
+                val end = finished.await()
+                if (end.hasError() && end.error != VideoRecordEvent.Finalize.ERROR_NONE && !file.isFile) error("video recording failed (error ${end.error})")
+            } finally { provider.unbindAll(); owner.destroy() }
+        }
+        RecordedClip(file.path, file.length(), durationMs)
     }
 
     private suspend fun takeFrame(facing: CameraFacing): Bitmap {
@@ -66,7 +103,7 @@ class CameraXCameraPort(private val context: Context, private val longSide: Int 
         f.addListener({ runCatching { f.get() }.fold(cont::resume, cont::resumeWithException) }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun shrink(bitmap: Bitmap, maxBytes: Int): ByteArray {
+    private fun shrink(bitmap: Bitmap, maxBytes: Int, longSide: Int): ByteArray {
         val scale = QualityPlanner.scaleFor(bitmap.width, bitmap.height, longSide)
         val scaled = if (scale < 1f) Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true) else bitmap
         fun jpeg(q: Int) = ByteArrayOutputStream().also { scaled.compress(Bitmap.CompressFormat.JPEG, q, it) }.toByteArray()
