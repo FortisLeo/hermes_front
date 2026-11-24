@@ -20,6 +20,10 @@ turbine = "1.2.1"
 room = "2.8.5"
 ksp = "2.3.6"
 robolectric = "4.16"
+zxing = "3.5.3"
+mlkitText = "16.0.1"
+mlkitObjects = "17.0.2"
+mlkitLabeling = "17.0.9"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +58,12 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+
+androidx-camera-video = { group = "androidx.camera", name = "camera-video", version.ref = "camerax" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+mlkit-objects = { group = "com.google.mlkit", name = "object-detection", version.ref = "mlkitObjects" }
+mlkit-image-labeling = { group = "com.google.mlkit", name = "image-labeling", version.ref = "mlkitLabeling" }
 
 vosk-android = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }

@@ -1,6 +1,5 @@
 package com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities
 
-import com.rishitgoklani.hermes_front_mobile.domain.CameraFacing
 import com.rishitgoklani.hermes_front_mobile.domain.CameraPort
 import com.rishitgoklani.hermes_front_mobile.domain.bridge.ActionResult
 import com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability
@@ -8,6 +7,7 @@ import com.rishitgoklani.hermes_front_mobile.domain.safety.KillSwitch
 import com.rishitgoklani.hermes_front_mobile.domain.sense.FaceCounter
 import com.rishitgoklani.hermes_front_mobile.domain.sense.FaceLocator
 import com.rishitgoklani.hermes_front_mobile.domain.sense.GazeMapper
+import com.rishitgoklani.hermes_front_mobile.domain.vision.facingArg
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -19,9 +19,10 @@ import kotlinx.serialization.json.put
 
 /** Is someone in front of the camera? Counts faces only; never identifies anyone and never stores the frame. */
 fun presenceCapability(camera: CameraPort, counter: FaceCounter, locator: FaceLocator? = null, onGaze: (Float, Float) -> Unit = { _, _ -> }) = Capability(
-    "presence_check", "Check whether a person is in front of the front camera (face count only, no identity, frame discarded).",
-) {
-    val jpeg = camera.capture(CameraFacing.Front, 80_000)
+    "presence_check", "Check whether a person is in front of the camera (default front; facing=back for the rear camera). Face count only, no identity, frame discarded.",
+    """{"type":"object","properties":{"facing":{"type":"string","enum":["front","back"],"description":"Default front"}}}""",
+) { a ->
+    val jpeg = camera.capture(a.facingArg(), 80_000)
     val n = counter.count(jpeg)
     if (n > 0 && locator != null) locator.locate(jpeg)?.let { val (gx, gy) = GazeMapper.toGaze(it); onGaze(gx, gy) }
     ActionResult.completed(if (n > 0) "Someone is there ($n)" else "Nobody visible", buildJsonObject { put("present", n > 0); put("faces", n) })
