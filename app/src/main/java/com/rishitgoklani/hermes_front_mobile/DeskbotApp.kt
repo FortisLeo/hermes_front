@@ -194,7 +194,31 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     }
 
     private val placeTracker = com.rishitgoklani.hermes_front_mobile.domain.sense.PlaceTracker()
-    private val greeter = com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) })
+    private fun hourNow() = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+
+    // Persona behaviors (#322 #325 #326 #332-#338): one registry, one hub; quiet context gates speech (#333).
+    private val quietContext = com.rishitgoklani.hermes_front_mobile.data.presence.AndroidQuietContext(app, hour = ::hourNow)
+    private val escalation = com.rishitgoklani.hermes_front_mobile.domain.presence.Escalation()
+    private val taskSupervisor = com.rishitgoklani.hermes_front_mobile.domain.presence.TaskSupervisor(scope)
+    private val behaviors = com.rishitgoklani.hermes_front_mobile.domain.presence.BehaviorRegistry(listOf(
+        com.rishitgoklani.hermes_front_mobile.domain.presence.StatusDisplay(),
+        com.rishitgoklani.hermes_front_mobile.domain.presence.ToneResponder(),
+        com.rishitgoklani.hermes_front_mobile.domain.presence.GreetingBehavior(com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = ::hourNow), hour = ::hourNow),
+        com.rishitgoklani.hermes_front_mobile.domain.presence.AttentionCue(),
+        com.rishitgoklani.hermes_front_mobile.domain.presence.ProactiveSuggestions(com.rishitgoklani.hermes_front_mobile.data.presence.AndroidUpcomingEvents(app), hour = ::hourNow),
+        escalation, taskSupervisor,
+        com.rishitgoklani.hermes_front_mobile.domain.presence.AmbientAwareness(com.rishitgoklani.hermes_front_mobile.data.presence.AndroidAmbientSense(app) {
+            runCatching { com.rishitgoklani.hermes_front_mobile.data.capabilities.soundLevelCapability().executor.execute(kotlinx.serialization.json.JsonObject(emptyMap())).data?.get("peak_dbfs")?.let { (it as kotlinx.serialization.json.JsonPrimitive).content.toDouble().toInt() } }.getOrNull()
+        }),
+        com.rishitgoklani.hermes_front_mobile.domain.presence.RoutineLearning(com.rishitgoklani.hermes_front_mobile.data.presence.FileAuditSource(File(app.filesDir, "audit.log")), hour = ::hourNow, utcOffsetMs = { java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()).toLong() }),
+    ))
+    private val hub = com.rishitgoklani.hermes_front_mobile.domain.presence.BehaviorHub(behaviors, quietContext, com.rishitgoklani.hermes_front_mobile.domain.presence.BodyCueSink(tts, face, runCapability))
+    init {
+        capabilities.register(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.quietStatusCapability(quietContext, hub))
+        capabilities.register(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.alertCapability(escalation, hub))
+        capabilities.register(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.taskCapability(taskSupervisor, { capabilities }, { runCapability }))
+        capabilities.register(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.routineSuggestCapability(com.rishitgoklani.hermes_front_mobile.data.presence.FileAuditSource(File(app.filesDir, "audit.log")), utcOffsetMs = { java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()).toLong() }))
+    }
     private val fusion = com.rishitgoklani.hermes_front_mobile.domain.sense.ArrivalFusion()
     init {
         // A model still PENDING means the app died before it proved itself: mark it BROKEN (the library shows it) and show the eyes.
@@ -235,21 +259,31 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
                 locationOnce(app)?.let { (lat, lon) -> placeTracker.update(lat, lon, ps).forEach { engine.onEvent(it) } } }
         }
         engine.observe { e ->
-            if (!kill.isActive()) greeter.onEvent(e)?.let { g -> face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Giggle); tts.enqueue(g) }
+            if (!kill.isActive()) hub.dispatch(com.rishitgoklani.hermes_front_mobile.domain.presence.Input.Device(e))
+            if (e is DeviceEvent.WifiDisconnected) fusion.wifiLost()
             val sig = when (e) {
                 is DeviceEvent.FaceSeen -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Face
                 is DeviceEvent.Sound -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Sound
                 is DeviceEvent.Motion -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Motion
                 is DeviceEvent.VisualChange -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Visual
+                is DeviceEvent.WifiConnected -> com.rishitgoklani.hermes_front_mobile.domain.sense.PresenceSignal.Wifi
                 else -> null
             }
             sig?.let { s -> fusion.signal(s)?.let { p -> audit.record("presence", if (p.arrived) "arrived" else "departed", "event"); scope.launch { engine.onEvent(p) } } }
         }
         scope.launch { while (true) { kotlinx.coroutines.delay(60_000); fusion.tick()?.let { p -> audit.record("presence", "departed", "event"); engine.onEvent(p) } } }
+        scope.launch { hub.runTicks(15_000) }
+        scope.launch { wake.events.collect { v ->
+            if (kill.isActive()) return@collect
+            when (v) {
+                is com.rishitgoklani.hermes_front_mobile.domain.VoiceEvent.State -> hub.dispatch(com.rishitgoklani.hermes_front_mobile.domain.presence.Input.State(v.state))
+                is com.rishitgoklani.hermes_front_mobile.domain.VoiceEvent.Heard -> hub.dispatch(com.rishitgoklani.hermes_front_mobile.domain.presence.Input.Heard(v.text))
+                else -> {}
+            }
+        } }
         motion.start()
         DeskbotAccessibilityService.onKillCombo = { kill.trigger("volume-down x3") }
         DeviceEventSource(app, scope) { e ->
-            if (e is DeviceEvent.BatteryLow) { face.setMood(com.rishitgoklani.hermes_front_mobile.domain.face.Mood.Worried); face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Sigh) }
             engine.onEvent(e)
         }.start()
     }
