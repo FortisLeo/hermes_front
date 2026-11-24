@@ -157,38 +157,12 @@ fun soundLevelCapability() = Capability("sound_level", "Measure the room's sound
         ActionResult.completed("%s (%.0f dBFS)".format(SoundMath.label(avg), avg), buildJsonObject { put("avg_dbfs", avg); put("peak_dbfs", peak); put("label", SoundMath.label(avg)) }) }
 }
 
-/** Camera-based change watcher: every [periodS] seconds grabs a small frame, compares thumbnails, reports changes. */
-class VisualWatcher(private val camera: com.rishitgoklani.hermes_front_mobile.domain.CameraPort, private val scope: CoroutineScope, private val onChange: suspend (Int) -> Unit) {
-    private var job: Job? = null
-    val running get() = job?.isActive == true
-    fun start(facing: com.rishitgoklani.hermes_front_mobile.domain.CameraFacing, periodS: Int) {
-        stop(); val detector = com.rishitgoklani.hermes_front_mobile.domain.sense.ChangeDetector(threshold = 14.0, cooldownMs = 30_000)
-        job = scope.launch {
-            var prev: ByteArray? = null
-            while (true) {
-                runCatching { thumb(kotlinx.coroutines.withTimeout(12_000) { camera.capture(facing, 40_000) }) }.onFailure { android.util.Log.w("DeskbotVisual", "capture failed: ${it.message}") }.getOrNull()?.let { t ->
-                    prev?.let { android.util.Log.d("DeskbotVisual", "diff=%.1f".format(com.rishitgoklani.hermes_front_mobile.domain.sense.FrameDiff.score(it, t))) }; prev = t
-                    detector.update(t)?.let { onChange(it.toInt()) }
-                }
-                delay(periodS * 1000L)
-            }
-        }
-    }
-    fun stop() { job?.cancel(); job = null }
-    private fun thumb(jpeg: ByteArray): ByteArray {
+/** Decodes a JPEG to a 32x32 grayscale thumbnail (1024 luma bytes) for frame differencing. */
+class AndroidFrameThumbnailer : com.rishitgoklani.hermes_front_mobile.domain.vision.FrameThumbnailer {
+    override fun thumb(jpeg: ByteArray): ByteArray {
         val bmp = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, BitmapFactory.Options().apply { inSampleSize = 4 }) ?: error("decode failed")
         val s = Bitmap.createScaledBitmap(bmp, 32, 32, true); val px = IntArray(32 * 32); s.getPixels(px, 0, 32, 0, 0, 32, 32)
         return ByteArray(px.size) { i -> val c = px[i]; (((c shr 16 and 255) * 299 + (c shr 8 and 255) * 587 + (c and 255) * 114) / 1000).toByte() }
-    }
-}
-
-fun visualWatchCapability(w: VisualWatcher) = Capability("visual_watch", "Watch the camera for scene changes (something appears/moves): action=start|stop|status, period_s (default 60, min 10), facing=front|back. Changes fire routine event 'visual_change'.",
-    """{"type":"object","properties":{"action":{"type":"string","enum":["start","stop","status"]},"period_s":{"type":"integer"},"facing":{"type":"string"}},"required":["action"]}""") { a ->
-    when (a.str("action")) {
-        "start" -> { w.start(if (a.str("facing") == "back") com.rishitgoklani.hermes_front_mobile.domain.CameraFacing.Back else com.rishitgoklani.hermes_front_mobile.domain.CameraFacing.Front, (a.int("period_s") ?: 60).coerceIn(10, 3600)); ActionResult.completed("Watching for changes") }
-        "stop" -> { w.stop(); ActionResult.completed("Stopped") }
-        "status" -> ActionResult.completed(if (w.running) "watching" else "stopped")
-        else -> ActionResult.failed("action must be start, stop or status")
     }
 }
 

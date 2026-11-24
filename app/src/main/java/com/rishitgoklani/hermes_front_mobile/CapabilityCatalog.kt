@@ -78,7 +78,7 @@ class CatalogDeps(
     val routines: RoutineRepository, val ambient: AmbientController, val selfChecks: List<SelfCheck>,
     val a2ui: com.rishitgoklani.hermes_front_mobile.domain.a2ui.A2uiStore, val onScreenShown: (com.rishitgoklani.hermes_front_mobile.domain.a2ui.Surface) -> Unit,
     val places: com.rishitgoklani.hermes_front_mobile.domain.sense.PlaceRepository, val isSafeMode: () -> Boolean,
-    val visualWatcher: com.rishitgoklani.hermes_front_mobile.data.capabilities.VisualWatcher, val soundWatcher: com.rishitgoklani.hermes_front_mobile.data.capabilities.SoundWatcher,
+    val visualWatcher: com.rishitgoklani.hermes_front_mobile.domain.sense.VisualWatcher, val soundWatcher: com.rishitgoklani.hermes_front_mobile.data.capabilities.SoundWatcher,
     val lockDisplay: Triple<() -> Boolean, (Boolean) -> Unit, () -> Unit>,
     val macros: com.rishitgoklani.hermes_front_mobile.domain.macro.MacroRecorder, val runCapability: () -> com.rishitgoklani.hermes_front_mobile.domain.behavior.RunCapability,
     val registry: () -> CapabilityRegistry,
@@ -88,7 +88,26 @@ class CatalogDeps(
     val avatarCatalog: com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarCatalogSource? = null,
     val avatarInstaller: com.rishitgoklani.hermes_front_mobile.domain.avatar.ModelInstaller? = null,
     val avatarLibraryTool: com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability? = null,
+    val video: com.rishitgoklani.hermes_front_mobile.domain.vision.VideoRecorderPort? = null,
 )
+
+/** Vision and recording tools (OCR, tables, codes, documents, objects, time-lapse, video). Every camera path takes facing=front|back. */
+private fun visionCapabilities(d: CatalogDeps, ui: com.rishitgoklani.hermes_front_mobile.domain.ui.UiAutomation, deskbotDir: File): List<com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability> {
+    val frames = com.rishitgoklani.hermes_front_mobile.domain.vision.VisionFrames(d.camera) { ui.screenshot() }
+    val reader = com.rishitgoklani.hermes_front_mobile.data.vision.MlKitTextReader()
+    val b64 = { b: ByteArray -> android.util.Base64.encodeToString(b, android.util.Base64.NO_WRAP) }
+    val scans = com.rishitgoklani.hermes_front_mobile.data.vision.FileFrameSink(deskbotDir, File(d.app.filesDir, "Deskbot"))
+    val lapse = com.rishitgoklani.hermes_front_mobile.data.vision.FileFrameSink(File(deskbotDir, "timelapse"), File(d.app.filesDir, "timelapse"))
+    return buildList {
+        add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.ocrCapability(frames, reader))
+        add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.tableToCsvCapability(frames, reader, b64))
+        add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.scanCodeCapability(frames, com.rishitgoklani.hermes_front_mobile.data.vision.ZxingCodeScanner()))
+        add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.scanDocumentCapability(frames, reader, scans))
+        add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.countObjectsCapability(frames, com.rishitgoklani.hermes_front_mobile.data.vision.MlKitObjectRecognizer()))
+        add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.timeLapseCapability(com.rishitgoklani.hermes_front_mobile.domain.vision.TimeLapseRecorder(d.camera, lapse, d.scope)))
+        d.video?.let { add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.videoRecordCapability(it)) }
+    }
+}
 
 /** Builds the full tool set Hermes can call. One place to add a capability (open/closed: append a line). */
 object CapabilityCatalog {
@@ -147,7 +166,7 @@ object CapabilityCatalog {
             add(com.rishitgoklani.hermes_front_mobile.data.capabilities.sensorLogCapability(sensorLogger, deskbotDir))
             addAll(com.rishitgoklani.hermes_front_mobile.domain.macro.macroCapabilities(d.macros, d.runCapability))
             add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.lockDisplayCapability(d.lockDisplay.first, d.lockDisplay.second, d.lockDisplay.third))
-            add(com.rishitgoklani.hermes_front_mobile.data.capabilities.visualWatchCapability(d.visualWatcher)); add(com.rishitgoklani.hermes_front_mobile.data.capabilities.soundWatchCapability(d.soundWatcher))
+            add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.visualWatchCapability(d.visualWatcher)); addAll(visionCapabilities(d, ui, deskbotDir)); add(com.rishitgoklani.hermes_front_mobile.data.capabilities.soundWatchCapability(d.soundWatcher))
         }
         return CapabilityRegistry(raw.map { it.recorded(d.macros) })
     }

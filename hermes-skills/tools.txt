@@ -123,3 +123,10 @@ system_report
 package_info
 device_logs
 radio
+ocr
+table_to_csv
+scan_code
+scan_document
+count_objects
+time_lapse
+video_record
