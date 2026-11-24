@@ -46,7 +46,7 @@ fun libraryModelUrl(id: String) = "https://appassets.androidplatform.net/library
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AvatarView(
+fun WebAvatarView(
     state: AvatarState, clipsDir: File, libraryDir: File, active: ModelRequest?, staged: ModelRequest?, events: ViewerEvents,
     modifier: Modifier = Modifier, snapshots: AvatarSnapshots? = null,
 ) {
