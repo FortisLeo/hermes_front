@@ -42,8 +42,8 @@ class VrmParserTest {
 
     @Test fun vrm0MaterialPropertiesBecomeToonMaterial() {
         val m = load().materials.single()
-        assertArrayEquals(floatArrayOf(1f, 0f, 0f), m.baseColor.copyOf(3), 0f); assertArrayEquals(floatArrayOf(0.5f, 0f, 0f), m.shadeColor, 0f)
-        assertEquals(0.002f, m.outlineWidth, 1e-6f); assertEquals(0.1f, m.shadeShift, 1e-6f); assertEquals(AlphaMode.OPAQUE, m.alphaMode)
+        assertArrayEquals(floatArrayOf(1f, 0f, 0f), m.baseColor.copyOf(3), 1e-6f); assertArrayEquals(floatArrayOf(0.2176f, 0f, 0f), m.shadeColor, 1e-4f)
+        assertEquals(0.002f, m.outlineWidth, 1e-6f); assertEquals(-0.145f, m.shadeShift, 1e-6f); assertEquals(0.955f, m.shadeToony, 1e-6f); assertEquals(AlphaMode.OPAQUE, m.alphaMode)
     }
 
     @Test fun vrm1ParsesExpressionsMaterialsAndSprings() {

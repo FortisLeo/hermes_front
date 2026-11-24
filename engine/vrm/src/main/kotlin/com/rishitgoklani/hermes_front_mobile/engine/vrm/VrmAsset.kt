@@ -32,6 +32,11 @@ class VrmSkin(val joints: IntArray, val inverseBind: FloatArray)
 /** An expression bind: set morph target [index] of glTF mesh [mesh] to weight * the expression's value. */
 class ExpressionBind(val mesh: Int, val index: Int, val weight: Float)
 
+/** How an expression interacts with the automatic blink/lip-sync/look-at layers (VRM 1.0 `override*`: "none", "block" or "blend"). */
+class ExpressionMeta(val isBinary: Boolean = false, val overrideBlink: String = "none", val overrideLookAt: String = "none", val overrideMouth: String = "none") {
+    companion object { val NONE = ExpressionMeta() }
+}
+
 class ImageRef(val mime: String, val view: Int)
 
 /** [tailLocal] is where the bone's tip sits in its own local space (the next joint's rest position, or a short stub for the last one). */
@@ -46,7 +51,7 @@ class VrmAsset(
     val isVrm0: Boolean, val nodes: List<VrmNode>, val roots: IntArray, val primitives: List<VrmPrimitive>, val materials: List<VrmMaterial>,
     val skins: List<VrmSkin>, val humanoid: Map<String, Int>, val expressions: Map<String, List<ExpressionBind>>,
     val meshTargetCounts: Map<Int, Int>, val images: List<ImageRef>, val springs: List<SpringChain>, val colliders: List<SphereCollider>,
-    val boundsMin: FloatArray, val boundsMax: FloatArray, private val imageBytes: (Int) -> ByteArray,
+    val boundsMin: FloatArray, val boundsMax: FloatArray, val expressionMeta: Map<String, ExpressionMeta> = emptyMap(), private val imageBytes: (Int) -> ByteArray,
 ) {
     fun imageBytes(image: Int): ByteArray = imageBytes.invoke(images[image].view)
     fun node(name: String): Int = nodes.firstOrNull { it.name == name }?.index ?: -1

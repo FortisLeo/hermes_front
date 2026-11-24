@@ -2,6 +2,7 @@ package com.rishitgoklani.hermes_front_mobile.engine.vrm
 
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.math.Mat4
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.math.Quat
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
@@ -26,8 +27,18 @@ class SpringSimulation(private val rig: Rig) {
     }
     val isEmpty get() = chains.isEmpty()
 
+    private var quietFor = 0f; private var maxMove = 0f
+
+    /**
+     * True when no joint has moved more than [SETTLE_DISTANCE] per step for about a second (or there is nothing to simulate). The renderer can then skip
+     * [step] and, together with [Rig.consumeDirty], stop redrawing. Any body motion that drags the hair breaks the quiet and clears this again.
+     */
+    val settled: Boolean get() = chains.isEmpty() || (primed && quietFor >= SETTLE_SECONDS)
+
     /** Forget all motion (after a model swap or a teleport) so the hair does not whip. */
-    fun reset() { primed = false }
+    fun reset() { primed = false; quietFor = 0f }
+
+    companion object { const val SETTLE_DISTANCE = 5e-5f; const val SETTLE_SECONDS = 1f }
 
     private fun prime() {
         for ((ci, ch) in chains.withIndex()) for ((ji, j) in ch.joints.withIndex()) {
@@ -42,8 +53,11 @@ class SpringSimulation(private val rig: Rig) {
         if (chains.isEmpty()) return
         if (!primed) prime()
         val d = dt.coerceIn(0.001f, 1f / 20f)
-        for ((ci, ch) in chains.withIndex()) {
-            for ((ji, j) in ch.joints.withIndex()) {
+        maxMove = 0f
+        for (ci in chains.indices) {
+            val ch = chains[ci]
+            for (ji in ch.joints.indices) {
+                val j = ch.joints[ji]
                 val node = j.node; val parent = rig.asset.nodes[node].parent
                 rig.recomputeNode(node)
                 rig.worldPosition(node, head)
@@ -57,7 +71,7 @@ class SpringSimulation(private val rig: Rig) {
                 for (k in 0..2) next[k] = cu[o + k] + (cu[o + k] - pr[o + k]) * drag + v[k] * j.stiffness * d + j.gravityDir[k] * j.gravityPower * d
                 constrain(next, head, boneLen[ci][ji])
                 for (col in ch.colliders) { if (collide(colliders[col], j.hitRadius, next)) constrain(next, head, boneLen[ci][ji]) }
-                for (k in 0..2) { pr[o + k] = cu[o + k]; cu[o + k] = next[k] }
+                for (k in 0..2) { val mv = abs(next[k] - cu[o + k]); if (mv > maxMove) maxMove = mv; pr[o + k] = cu[o + k]; cu[o + k] = next[k] }
                 // rotate the node so its axis points at the new tail
                 for (k in 0..2) v[k] = next[k] - head[k]
                 Quat.conjugate(q2, q3)
@@ -69,6 +83,7 @@ class SpringSimulation(private val rig: Rig) {
             }
         }
         for (i in trailing) rig.recomputeNode(i)
+        if (maxMove < SETTLE_DISTANCE) quietFor += dt.coerceAtLeast(0f) else quietFor = 0f
     }
 
     private fun constrain(p: FloatArray, head: FloatArray, len: Float) {

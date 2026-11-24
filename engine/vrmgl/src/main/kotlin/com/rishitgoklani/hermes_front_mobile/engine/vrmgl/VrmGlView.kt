@@ -140,7 +140,7 @@ class VrmGlView(
     /** Anything that makes the next frames differ: animation, a recent input, GL work waiting, a snapshot. */
     private fun isMoving(): Boolean = active?.driver?.moving == true || SystemClock.uptimeMillis() < busyUntil || queue.hasWork || thumbRequest != null || !springsSettled()
     /** Integrator hook: true once the hair/cloth springs have come to rest (e.g. SpringSimulation.settled). Until it exists the 3 s quiet period covers it. */
-    private fun springsSettled(): Boolean = true
+    private fun springsSettled(): Boolean = active?.springs?.settled ?: true
 
     private fun startLoop() { if (running && !looping) { looping = true; choreographer.postFrameCallback(frame) } }
     private fun stopLoop() { choreographer.removeFrameCallback(frame); main.removeCallbacks(heartbeat); looping = false }
@@ -353,9 +353,10 @@ class VrmGlView(
             val m = active; val f = framing
             if (m != null && f != null) {
                 m.driver.frame(dt, SystemClock.uptimeMillis(), input); m.rig.update(); if (config.springs) m.springs.step(dt)
+                val poseChanged = m.rig.consumeDirty() || !m.springs.settled
                 m.updateMorphs()
                 Mat4.perspective(f.fovY, width.toFloat() / height, 0.1f, 20f, proj); Mat4.lookAt(f.eyeX, f.eyeY, f.eyeZ, f.targetX, f.targetY, f.targetZ, viewM); Mat4.mul(proj, 0, viewM, 0, vp, 0)
-                m.draw(vp, light, poseChanged = true)
+                m.draw(vp, light, poseChanged)
                 if (++headTick % 6 == 0) reportHead(m, f)
             }
             thumbRequest?.let { (size, cb) -> thumbRequest = null; cb2(size, cb) }

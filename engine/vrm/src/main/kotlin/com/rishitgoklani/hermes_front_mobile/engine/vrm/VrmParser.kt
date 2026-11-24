@@ -53,13 +53,14 @@ object VrmParser {
         if (prims.isEmpty()) throw VrmFormatException("Model has no triangle meshes")
         val humanoid = parseHumanoid(v0, v1)
         if (humanoid["hips"] == null || humanoid["head"] == null) throw VrmFormatException("Model is missing the hips or head bone")
-        val expressions = parseExpressions(root, v0, v1, nodes)
+        val meta = LinkedHashMap<String, ExpressionMeta>()
+        val expressions = parseExpressions(root, v0, v1, nodes, meta)
         val (chains, colliders) = if (v0 != null) SpringParser.parse(v0, v1, nodes) else SpringParser.parseV1(ext, nodes)
-        return VrmAsset(v0 != null, nodes, roots, prims, materials, skins, humanoid, expressions, targetCounts, images, chains, colliders, bMin, bMax) { view -> acc.viewBytes(view) }
+        return VrmAsset(v0 != null, nodes, roots, prims, materials, skins, humanoid, expressions, targetCounts, images, chains, colliders, bMin, bMax, meta) { view -> acc.viewBytes(view) }
     }
 
     // ---- nodes ----
-    private fun parseNodes(root: JsonObject): List<VrmNode> {
+    internal fun parseNodes(root: JsonObject): List<VrmNode> {
         val raw = root.a("nodes"); val parent = IntArray(raw.size) { -1 }
         raw.forEachIndexed { i, n -> n.obj()?.a("children")?.ints()?.forEach { c -> if (c in parent.indices) parent[c] = i } }
         return raw.mapIndexed { i, el ->
@@ -180,25 +181,38 @@ object VrmParser {
                 val shader = p0.s("shader").orEmpty(); val fl = p0.o("floatProperties"); val vec = p0.o("vectorProperties"); val tex = p0.o("textureProperties")
                 fun vecOf(k: String) = vec?.a(k)?.floats()?.takeIf { it.size >= 3 }
                 unlit = shader.contains("Unlit", true)
-                vecOf("_Color")?.let { c -> base[0] = c[0]; base[1] = c[1]; base[2] = c[2]; if (c.size > 3) base[3] = c[3] }
-                vecOf("_ShadeColor")?.let { shade = it.copyOf(3) } ?: run { shade = floatArrayOf(base[0] * .8f, base[1] * .8f, base[2] * .8f) }
-                vecOf("_EmissionColor")?.let { emissive[0] = it[0]; emissive[1] = it[1]; emissive[2] = it[2] }
+                // VRM 0.x colours are sRGB; everything downstream is linear (as VRM 1.0), so convert here exactly like three-vrm's V0 compat plugin (pow 2.2).
+                vecOf("_Color")?.let { c -> base[0] = v0Linear(c[0]); base[1] = v0Linear(c[1]); base[2] = v0Linear(c[2]); if (c.size > 3) base[3] = c[3] }
+                vecOf("_ShadeColor")?.let { shade = floatArrayOf(v0Linear(it[0]), v0Linear(it[1]), v0Linear(it[2])) } ?: run { shade = floatArrayOf(base[0] * .8f, base[1] * .8f, base[2] * .8f) }
+                vecOf("_EmissionColor")?.let { emissive[0] = v0Linear(it[0]); emissive[1] = v0Linear(it[1]); emissive[2] = v0Linear(it[2]) }
                 tex?.i("_MainTex")?.let { baseImg = image(it) }; tex?.i("_ShadeTexture")?.let { shadeImg = image(it) }; tex?.i("_EmissionMap")?.let { emImg = image(it) }
-                fl?.f("_Cutoff")?.let { cutoff = it }; shift = fl?.f("_ShadeShift") ?: 0f; toony = fl?.f("_ShadeToony") ?: 0.9f
+                fl?.f("_Cutoff")?.let { cutoff = it }; val mig = migrateV0Shade(fl?.f("_ShadeShift") ?: 0f, fl?.f("_ShadeToony") ?: 0.9f); shift = mig[0]; toony = mig[1]
                 alpha = when ((fl?.f("_BlendMode") ?: -1f).toInt()) { 1 -> AlphaMode.MASK; 2, 3 -> AlphaMode.BLEND; 0 -> AlphaMode.OPAQUE; else -> alpha }
                 if (shader.contains("Cutout", true)) alpha = AlphaMode.MASK
                 double = (fl?.f("_CullMode") ?: 2f).toInt() == 0 || double
                 if ((fl?.f("_OutlineWidthMode") ?: 0f) > 0f) outline = (fl?.f("_OutlineWidth") ?: 0f) * 0.01f
-                vecOf("_OutlineColor")?.let { outlineColor = it.copyOf(3) }
+                vecOf("_OutlineColor")?.let { outlineColor = floatArrayOf(v0Linear(it[0]), v0Linear(it[1]), v0Linear(it[2])) }
             }
             VrmMaterial(m.s("name") ?: "material$i", base, shade, baseImg, shadeImg, emissive, emImg, alpha, cutoff, double, shift, toony, outline.coerceIn(0f, 0.02f), outlineColor, unlit)
         }
     }
 
+    /** VRM 0.x sRGB component -> linear, the same pow(c, 2.2) three-vrm's VRMMaterialsV0CompatPlugin uses (the renderer's pow(1/2.2) undoes it). */
+    internal fun v0Linear(c: Float): Float = Math.pow(c.toDouble(), 2.2).toFloat()
+
+    /** VRM 0.x `_ShadeShift`/`_ShadeToony` -> VRM 1.0 (shadingShiftFactor, shadingToonyFactor), verbatim from three-vrm's VRMMaterialsV0CompatPlugin. */
+    internal fun migrateV0Shade(shadeShift: Float, shadeToony: Float): FloatArray {
+        val toony = shadeToony + (1f - shadeToony) * (0.5f + 0.5f * shadeShift)      // MathUtils.lerp(toony, 1, 0.5 + 0.5 * shift)
+        return floatArrayOf(-shadeShift - (1f - toony), toony)
+    }
+
     // ---- humanoid & expressions ----
     private fun parseHumanoid(v0: JsonObject?, v1: JsonObject?): Map<String, Int> {
         val out = LinkedHashMap<String, Int>()
-        v0?.o("humanoid")?.a("humanBones")?.forEach { b -> val o = b.obj() ?: return@forEach; val name = o.s("bone"); val node = o.i("node"); if (name != null && node != null) out[name] = node }
+        val renameThumbs = v0?.o("humanoid")?.a("humanBones")?.any { it.obj()?.s("bone")?.endsWith("ThumbIntermediate") == true } == true
+        v0?.o("humanoid")?.a("humanBones")?.forEach { b -> val o = b.obj() ?: return@forEach; val raw = o.s("bone"); val node = o.i("node")
+            val name = if (renameThumbs && raw != null) raw.replace("ThumbProximal", "ThumbMetacarpal").replace("ThumbIntermediate", "ThumbProximal") else raw   // three-vrm's VRM0 -> VRM1 thumb names
+            if (name != null && node != null) out[name] = node }
         v1?.o("humanoid")?.o("humanBones")?.forEach { (name, v) -> v.obj()?.i("node")?.let { out[name] = it } }
         return out
     }
@@ -206,7 +220,7 @@ object VrmParser {
     private val V0_PRESETS = mapOf("neutral" to "neutral", "a" to "aa", "i" to "ih", "u" to "ou", "e" to "ee", "o" to "oh", "blink" to "blink", "joy" to "happy", "angry" to "angry",
         "sorrow" to "sad", "fun" to "relaxed", "blink_l" to "blinkLeft", "blink_r" to "blinkRight", "lookup" to "lookUp", "lookdown" to "lookDown", "lookleft" to "lookLeft", "lookright" to "lookRight")
 
-    private fun parseExpressions(root: JsonObject, v0: JsonObject?, v1: JsonObject?, nodes: List<VrmNode>): Map<String, List<ExpressionBind>> {
+    private fun parseExpressions(root: JsonObject, v0: JsonObject?, v1: JsonObject?, nodes: List<VrmNode>, meta: MutableMap<String, ExpressionMeta>): Map<String, List<ExpressionBind>> {
         val out = LinkedHashMap<String, List<ExpressionBind>>()
         v0?.o("blendShapeMaster")?.a("blendShapeGroups")?.forEach { g ->
             val o = g.obj() ?: return@forEach
@@ -214,14 +228,15 @@ object VrmParser {
                 ExpressionBind(mesh, index, (bo.f("weight") ?: 100f) / 100f) }
             if (binds.isEmpty()) return@forEach
             val preset = o.s("presetName")?.lowercase()?.let { V0_PRESETS[it] }; val name = o.s("name")
-            if (preset != null) out[preset] = binds
-            if (name != null && name.isNotBlank() && !out.containsKey(name)) out[name] = binds
+            val m = ExpressionMeta(isBinary = o.b("isBinary") ?: false)
+            if (preset != null) { out[preset] = binds; meta[preset] = m }
+            if (name != null && name.isNotBlank() && !out.containsKey(name)) { out[name] = binds; meta[name] = m }
         }
         v1?.o("expressions")?.let { ex ->
             fun add(name: String, e: JsonObject) {
                 val binds = e.a("morphTargetBinds").mapNotNull { b -> val bo = b.obj() ?: return@mapNotNull null; val node = bo.i("node") ?: return@mapNotNull null; val index = bo.i("index") ?: return@mapNotNull null
                     val mesh = nodes.getOrNull(node)?.mesh ?: -1; if (mesh < 0) null else ExpressionBind(mesh, index, bo.f("weight") ?: 1f) }
-                if (binds.isNotEmpty()) out[name] = binds
+                if (binds.isNotEmpty()) { out[name] = binds; meta[name] = ExpressionMeta(e.b("isBinary") ?: false, e.s("overrideBlink") ?: "none", e.s("overrideLookAt") ?: "none", e.s("overrideMouth") ?: "none") }
             }
             ex.o("preset")?.forEach { (name, e) -> e.obj()?.let { add(name, it) } }
             ex.o("custom")?.forEach { (name, e) -> e.obj()?.let { add(name, it) } }
