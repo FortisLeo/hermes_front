@@ -80,6 +80,44 @@ ver = {}
 try: ver = {int(k): v for k, v in json.load(open(f"{root}/docs/recipe-verification.json")).items() if v["ok"]}
 except FileNotFoundError: pass
 rows = []
+# 2026-11-25 device pass (merged presence/vision/routine work, installed and exercised through the bridge).
+_PROMOTED = {
+ 43: "ocr: screen OCR returns text with line boxes; camera OCR runs on the front and back cameras (ML Kit)",
+ 104: "notifications_rank + notification_silence: ranked live, silenced app dismissed on device",
+ 115: "count_objects: ML Kit detection + labels on front and back camera (coarse categories; use vision for specifics)",
+ 116: "visual_watch: front camera watcher raised a visual_change event (score 66) into the audit log on device",
+ 119: "time_lapse (4 frames) and video_record (front, back with audio) wrote real files on device; motion-triggered recording stays a recipe",
+ 152: "charge_limit: software cap fired the 'Charge limit reached' notification on device; hardware cap via scripts/charge_limit.sh depends on a sysfs node",
+ 228: "routine_template_run focus: Do Not Disturb on, notification filter on, cancel restored both on device",
+ 333: "quiet_status: reported 'Quiet: sleep' at night on device; QuietPolicy gates speech",
+ 414: "A2UI card drawn as a real overlay window above the Settings app, Close works, falls back in-app without permission",
+}
+_STILL_PARTIAL = {
+ 47: "table_to_csv ran on device (screen); not yet checked against a real table or chart",
+ 114: "scan_code and scan_document run on front and back cameras; decode unit-tested with generated QR/EAN, no real code shown to the camera yet; no PDF output",
+ 59: "lock_screen_answer notification posts and clears on device; custom always-on-display is not possible for a third-party app",
+ 128: "now_playing runs ('Nothing is playing'); no live track tested; web lookup stays with Hermes",
+ 188: "health_check run/enable/disable verified; the 5-minute scheduled alert not yet observed",
+ 223: "reminder_when add/list/remove verified; place and charger trigger plus nagging not yet observed",
+ 226: "wakeup template listed and unit-tested; not run live",
+ 227: "bedtime template listed and unit-tested; not run live",
+ 264: "GeofencePoller (battery-aware polling) unit-tested; not field-tested",
+ 322: "StatusDisplay + battery-low face unit-tested; not seen live",
+ 325: "GreetingBehavior (arrival + farewell) unit-tested; no live arrival",
+ 326: "KeywordToneClassifier + ToneResponder unit-tested; not heard live",
+ 331: "Wi-Fi signal added to ArrivalFusion, unit-tested; no live Wi-Fi drop yet",
+ 332: "ProactiveSuggestions (meeting, battery, late) unit-tested; calendar prompt not seen live",
+ 334: "AttentionCue calls presence_check on the front camera (runs on device); gaze toward a real face not seen",
+ 335: "task tool pauses on Listening and resumes on Idle; a 3-step task ran to completion, pause/resume not observed live",
+ 336: "alert_escalate unit-tested (status runs); loud escalation not run live at night",
+ 337: "AmbientAwareness unit-tested; volume/dim changes not observed live",
+ 338: "routine_suggest runs ('No repeated actions found'); needs 3 days of audit history",
+}
+for _n, _w in _PROMOTED.items():
+    PARTIAL.pop(_n, None); BUILT[_n] = _w
+for _n, _w in _STILL_PARTIAL.items():
+    BUILT.pop(_n, None); PARTIAL[_n] = _w
+
 counts = {"BUILT": 0, "VERIFIED": 0, "PARTIAL": 0, "SKILL": 0, "BLOCKED": 0}
 for n in sorted(feat):
     name, grp = feat[n]
