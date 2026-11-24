@@ -38,6 +38,8 @@ interface VrmEvents {
     fun onError(key: String, message: String) {}
     fun onNodes(names: List<String>) {}
     fun onHead(x: Float, y: Float, size: Float) {}
+    /** The renderer hit an unrecoverable GL error (shader compile, EGL). The host should fall back to the Eyes face. */
+    fun onFatal(message: String) {}
 }
 
 /**

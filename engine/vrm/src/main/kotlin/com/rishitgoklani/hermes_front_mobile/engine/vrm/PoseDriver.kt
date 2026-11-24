@@ -16,7 +16,12 @@ class AnimationSpec(val keyframes: List<KeyframeSpec>, val loop: Boolean)
 class DriverInput(
     val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f, val mood: String = "", val blendMs: Int = 250,
     val pose: PoseSpec = PoseSpec(), val animation: AnimationSpec? = null,
+    /** Name of a VRMA clip to play (empty = none); the driver asks [PoseDriver.clipSource] for its bytes. */
+    val clip: String = "",
 )
+
+/** Where VRMA clip files come from (the app implements it with a folder of .vrma files). Return null when the clip does not exist. */
+fun interface ClipSource { fun load(name: String): ByteArray? }
 
 /** Something that overwrites bones directly each frame (a VRMA clip). While [active] the driver leaves the bones to it. */
 interface ClipPlayer { val active: Boolean; fun advance(dt: Float, rig: Rig) }
@@ -38,6 +43,8 @@ class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.
     private var blinkIn = 2f; private var blinkT = -1f; private var time = 0f
     private var lastAnim: AnimationSpec? = null; private var animStartMs = 0L
     var clip: ClipPlayer? = null
+    /** Set by the host so [DriverInput.clip] can be resolved. */
+    var clipSource: ClipSource? = null
     /** Ids of rest-pose offsets already applied, so nodes the agent stops touching return to rest. */
     private val touched = HashSet<String>()
 
