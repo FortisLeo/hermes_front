@@ -7,13 +7,13 @@ package com.rishitgoklani.hermes_front_mobile.domain.avatar
  */
 object AvatarModelGuard {
     const val MAX_FILE_BYTES = 50 * 1024 * 1024
-    private val budget = TextureBudget()
 
     /** Null when the model can be rendered (possibly with shrunk textures), otherwise the reason to refuse it. */
-    fun problem(bytes: ByteArray): String? =
+    fun problem(bytes: ByteArray, budget: TextureBudget = TextureBudget()): String? =
         if (bytes.size > MAX_FILE_BYTES) "model is ${"%.1f".format(bytes.size / 1048576.0)} MB; the limit is ${MAX_FILE_BYTES / 1048576} MB" else budget.problem(bytes)
 
-    fun plan(bytes: ByteArray): TexturePlan = budget.plan(bytes)
+    /** [budget] defaults to the fixed 48 MB policy; pass [TextureBudget.forDevice] where the phone's RAM is known. */
+    fun plan(bytes: ByteArray, budget: TextureBudget = TextureBudget()): TexturePlan = budget.plan(bytes)
     /** Texture size cap the viewer should apply to this model. */
-    fun textureCap(bytes: ByteArray): Int = plan(bytes).cap
+    fun textureCap(bytes: ByteArray, budget: TextureBudget = TextureBudget()): Int = plan(bytes, budget).cap
 }

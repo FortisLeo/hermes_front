@@ -63,14 +63,28 @@ object GlbImages {
 /** Strategy: how small must textures be so the model fits the memory budget? */
 fun interface TexturePolicy { fun cap(images: List<ImageDim>): Int }
 
-/** GPU memory of the images at [cap]: RGBA (4 bytes per pixel) plus about a third more for mipmaps. */
+/** GPU memory of the images at [cap] plus about a third more for mipmaps. [bytesPerPixel] is what the images are stored with: RGBA 4 (default, worst case), opaque RGB565 2. */
 object TextureMemory {
-    fun estimate(images: List<ImageDim>, cap: Int): Long = images.sumOf { val f = it.fit(cap); f.w.toLong() * f.h * 4 * 4 / 3 }
+    fun estimate(images: List<ImageDim>, cap: Int, bytesPerPixel: Int = 4): Long = images.sumOf { val f = it.fit(cap); f.w.toLong() * f.h * bytesPerPixel * 4 / 3 }
+}
+
+/** Texture memory a device may spend on avatars (active + staged together), a pure function of its RAM. */
+object DeviceTextureBudget {
+    private const val MB = 1024L * 1024
+    /** Used where no device is known (e.g. when a model is imported by a headless tool). */
+    const val DEFAULT_BYTES = 48L * 1024 * 1024
+    /** A 80th of total RAM, clamped to 24..96 MB, halved on low-RAM devices. */
+    fun bytes(totalMemBytes: Long, lowRamDevice: Boolean): Long {
+        val b = (totalMemBytes / 80).coerceIn(24 * MB, 96 * MB)
+        return if (lowRamDevice) b / 2 else b
+    }
 }
 
 /** Picks the largest cap from [caps] (descending) whose estimated texture memory fits [budgetBytes]; falls back to the smallest. */
-class MemoryBudgetPolicy(private val budgetBytes: Long = 48L * 1024 * 1024, private val caps: List<Int> = listOf(2048, 1024, 512, 256)) : TexturePolicy {
-    override fun cap(images: List<ImageDim>) = caps.firstOrNull { TextureMemory.estimate(images, it) <= budgetBytes } ?: caps.last()
+class MemoryBudgetPolicy(
+    private val budgetBytes: Long = DeviceTextureBudget.DEFAULT_BYTES, private val caps: List<Int> = listOf(2048, 1024, 512, 256), private val bytesPerPixel: Int = 4,
+) : TexturePolicy {
+    override fun cap(images: List<ImageDim>) = caps.firstOrNull { TextureMemory.estimate(images, it, bytesPerPixel) <= budgetBytes } ?: caps.last()
 }
 
 data class TexturePlan(val cap: Int, val images: Int, val estimatedBytes: Long, val originalBytes: Long) {
@@ -80,6 +94,10 @@ data class TexturePlan(val cap: Int, val images: Int, val estimatedBytes: Long, 
 
 /** Plans texture sizes for a model and refuses models that cannot fit even at the smallest size. */
 class TextureBudget(private val policy: TexturePolicy = MemoryBudgetPolicy(), private val hardLimitBytes: Long = 160L * 1024 * 1024, private val floorCap: Int = 256) {
+    companion object {
+        /** A budget sized for this device's RAM (see [DeviceTextureBudget]). */
+        fun forDevice(totalMemBytes: Long, lowRamDevice: Boolean) = TextureBudget(MemoryBudgetPolicy(DeviceTextureBudget.bytes(totalMemBytes, lowRamDevice)))
+    }
     fun plan(glb: ByteArray): TexturePlan { val imgs = GlbImages.read(glb); val cap = policy.cap(imgs); return TexturePlan(cap, imgs.size, TextureMemory.estimate(imgs, cap), TextureMemory.estimate(imgs, Int.MAX_VALUE)) }
     fun problem(glb: ByteArray): String? {
         val imgs = GlbImages.read(glb); val min = TextureMemory.estimate(imgs, floorCap)

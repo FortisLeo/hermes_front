@@ -49,4 +49,21 @@ class TextureBudgetTest {
         val big = TextureBudget().plan(TestGlb.build(List(6) { TestGlb.png(4096, 4096) })); assertTrue(big.note()!!.startsWith("Textures shrunk to 1024 px"))
         assertNull(TextureBudget().plan(TestGlb.build(listOf(TestGlb.png(512, 512)))).note()); assertNull(TextureBudget().plan(TestGlb.build(emptyList())).note())
     }
+    @Test fun sixteenBitImagesCostHalfTheMemory() {
+        val one = listOf(ImageDim(2048, 2048)); assertEquals(TextureMemory.estimate(one, 2048, 4).toDouble(), TextureMemory.estimate(one, 2048, 2) * 2.0, 2.0); assertEquals(TextureMemory.estimate(one, 2048), TextureMemory.estimate(one, 2048, 4))
+    }
+    @Test fun policyKnowsTheStoredPixelSize() {
+        val imgs = List(4) { ImageDim(2048, 2048) }; val mb = 1024L * 1024
+        assertEquals(1024, MemoryBudgetPolicy(64 * mb, bytesPerPixel = 4).cap(imgs)); assertEquals(2048, MemoryBudgetPolicy(64 * mb, bytesPerPixel = 2).cap(imgs))
+    }
+    @Test fun deviceBudgetIsAnEightiethOfRamClampedAndHalvedOnLowRam() {
+        val mb = 1024L * 1024
+        assertEquals(24 * mb, DeviceTextureBudget.bytes(1024 * mb, false)); assertEquals(3400 * mb / 80, DeviceTextureBudget.bytes(3400 * mb, false)); assertEquals(96 * mb, DeviceTextureBudget.bytes(16384 * mb, false))
+        assertEquals(12 * mb, DeviceTextureBudget.bytes(1024 * mb, true)); assertEquals(DeviceTextureBudget.bytes(4096 * mb, false) / 2, DeviceTextureBudget.bytes(4096 * mb, true))
+    }
+    @Test fun aSmallerDeviceBudgetShrinksTexturesMore() {
+        val glb = TestGlb.build(List(6) { TestGlb.png(4096, 4096) }); val mb = 1024L * 1024
+        assertTrue(TextureBudget.forDevice(1024 * mb, true).plan(glb).cap < TextureBudget.forDevice(16384 * mb, false).plan(glb).cap)
+        assertEquals(TextureBudget().plan(glb).cap, AvatarModelGuard.textureCap(glb)); assertTrue(AvatarModelGuard.textureCap(glb, TextureBudget.forDevice(1024 * mb, true)) <= AvatarModelGuard.textureCap(glb))
+    }
 }

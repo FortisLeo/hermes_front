@@ -6,47 +6,80 @@ import org.junit.Test
 
 class ModelSlotsTest {
     private class Host : SlotHost<String> {
-        val pending = LinkedHashMap<String, (Result<String>) -> Unit>(); val log = ArrayList<String>(); var clock = 0L
-        override fun load(key: String, done: (Result<String>) -> Unit) { log += "load $key"; pending[key] = done }
+        val pending = LinkedHashMap<String, (Result<String>) -> Unit>(); val finishing = LinkedHashMap<String, (Result<Unit>) -> Unit>()
+        val log = ArrayList<String>(); var clock = 0L
+        override fun load(key: String, withTextures: Boolean, done: (Result<String>) -> Unit) { log += "load $key${if (withTextures) "" else " geometry"}"; pending[key] = done }
+        override fun finishShow(key: String, model: String, done: (Result<Unit>) -> Unit) { log += "finish $key"; finishing[key] = done }
         override fun show(key: String, model: String) { log += "show $key" }
         override fun dispose(key: String, model: String) { log += "dispose $key" }
+        override fun cancel(key: String) { log += "cancel $key" }
         override fun shown(key: String, ms: Long, wasStaged: Boolean) { log += "shown $key $ms $wasStaged" }
         override fun staged(key: String, ms: Long) { log += "staged $key $ms" }
         override fun failed(key: String, message: String) { log += "failed $key $message" }
         fun finish(key: String, r: Result<String> = Result.success("m-$key")) { pending.remove(key)!!(r) }
+        fun finishTextures(key: String, r: Result<Unit> = Result.success(Unit)) { finishing.remove(key)!!(r) }
     }
     private fun slots(h: Host) = ModelSlots(h) { h.clock }
 
-    @Test fun loadsActiveThenStagesTheNextOnlyAfterItShows() {
+    @Test fun loadsActiveThenStagesTheNextGeometryOnlyAfterItShows() {
         val h = Host(); val s = slots(h); s.want("a", "b")
         assertEquals(listOf("load a"), h.log)                       // b waits: never two decodes at once
         h.clock = 40; h.finish("a")
-        assertEquals(listOf("load a", "show a", "shown a 40 false", "load b"), h.log)
+        assertEquals(listOf("load a", "show a", "shown a 40 false", "load b geometry"), h.log)
         h.clock = 90; h.finish("b"); assertTrue(h.log.last().startsWith("staged b")); assertEquals(2, s.resident)
     }
 
-    @Test fun swipingPromotesTheStagedModelWithoutLoading() {
+    @Test fun promotingAStagedModelFinishesItsTexturesWhileTheOldOneStaysOnScreen() {
         val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.finish("b"); h.log.clear()
         s.want("b", "c")
-        assertEquals(listOf("show b", "shown b 0 true", "dispose a", "load c"), h.log)
-        assertEquals("b", s.active)
+        assertEquals(listOf("finish b"), h.log); assertEquals("a", s.active)             // a still on screen, nothing disposed yet
+        h.finishTextures("b")
+        assertEquals(listOf("finish b", "show b", "shown b 0 true", "dispose a", "load c geometry"), h.log); assertEquals("b", s.active)
+    }
+
+    @Test fun theOldModelIsNotDisposedUntilTheReplacementIsFullyReady() {
+        val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.finish("b"); h.log.clear()
+        s.want("b", null); assertTrue("dispose a" !in h.log && "show b" !in h.log); s.want("b", null); assertEquals(listOf("finish b"), h.log)   // no double finish
+        h.finishTextures("b"); assertTrue("dispose a" in h.log); assertEquals("b", s.active)
+    }
+
+    @Test fun failedTextureFinishDisposesTheModelReportsOnceAndKeepsTheOldOneShowing() {
+        val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.finish("b"); h.log.clear()
+        s.want("b", null); h.finishTextures("b", Result.failure(IllegalStateException("oom")))
+        assertEquals(listOf("finish b", "dispose b", "failed b oom"), h.log); assertEquals("a", s.active)
+    }
+
+    @Test fun swipingBackReloadsTheOldModelAsGeometryOnly() {
+        val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.finish("b"); s.want("b", "a"); h.finishTextures("b"); h.log.clear()
+        s.want("b", "a"); assertTrue(s.resident == 1)
+        h.finish("a"); assertEquals(2, s.resident)
     }
 
     @Test fun neverMoreThanTwoResident() {
         val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.finish("b")
-        for (k in listOf("c" to "d", "d" to "e", "e" to "a")) { s.want(k.first, k.second); h.pending.keys.toList().forEach { h.finish(it) }; assertTrue(s.resident <= 2) }
+        for (k in listOf("c" to "d", "d" to "e", "e" to "a")) {
+            s.want(k.first, k.second)
+            repeat(4) { h.pending.keys.toList().forEach { h.finish(it) }; h.finishing.keys.toList().forEach { h.finishTextures(it) }; assertTrue(s.resident <= 2) }
+        }
     }
 
     @Test fun promotesAStageThatIsStillLoading() {
         val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.log.clear()
         s.want("b", "c")                                            // b is mid-load as staged and is now wanted on screen
-        assertEquals(emptyList<String>(), h.log); h.finish("b")
-        assertTrue(h.log.contains("show b")); assertTrue(h.log.contains("dispose a"))
+        assertEquals(emptyList<String>(), h.log); h.finish("b"); assertEquals(listOf("finish b"), h.log)
+        h.finishTextures("b"); assertTrue(h.log.contains("show b")); assertTrue(h.log.contains("dispose a"))
     }
 
-    @Test fun supersededLoadIsDisposedWhenItFinishes() {
+    @Test fun supersededLoadIsCancelledAndDisposedWhenItFinishes() {
         val h = Host(); val s = slots(h); s.want("a", null); s.want("b", null)
-        h.finish("a"); assertTrue("dispose a" in h.log); assertTrue("show a" !in h.log)
+        assertTrue("cancel a" in h.log || "dispose a" !in h.log)
+        h.finish("a"); assertTrue("show a" !in h.log)
+    }
+
+    @Test fun droppingTheStagedModelKeepsTheOneOnScreen() {
+        val h = Host(); val s = slots(h); s.want("a", "b"); h.finish("a"); h.finish("b"); h.log.clear()
+        s.dropStaged(); assertEquals(listOf("dispose b"), h.log); assertEquals(1, s.resident); assertEquals("a", s.active)
+        s.want("a", "b"); assertEquals("load b geometry", h.log.last())     // the next want brings it back
     }
 
     @Test fun failureIsReportedOnceAndNotRetriedUntilAsked() {
@@ -61,7 +94,8 @@ class ModelSlotsTest {
         assertEquals(0, s.resident); assertTrue("dispose a" in h.log && "dispose b" in h.log)
     }
 
-    @Test fun releaseAllClearsState() {
-        val h = Host(); val s = slots(h); s.want("a", null); h.finish("a"); s.releaseAll(); assertEquals(0, s.resident); assertEquals(null, s.active)
+    @Test fun releaseAllClearsStateAndCancelsLoadsInFlight() {
+        val h = Host(); val s = slots(h); s.want("a", null); h.finish("a"); s.want("a", "b"); s.releaseAll()
+        assertEquals(0, s.resident); assertEquals(null, s.active); assertTrue("cancel b" in h.log)
     }
 }

@@ -29,6 +29,8 @@ interface ViewerEvents {
     fun onError(key: String, message: String) {}
     fun onNodes(names: List<String>) {}
     fun onHead(x: Float, y: Float, size: Float) {}
+    /** The native renderer failed for good (GL error); the host should fall back to the eyes. */
+    fun onFatal(message: String) {}
 }
 
 /** Lets other code ask the live viewer for a small PNG of the current frame (used for library thumbnails). */
