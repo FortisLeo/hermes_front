@@ -31,4 +31,12 @@ class ArrivalFusionTest {
         assertFalse(TriggerMatcher.matches(Trigger("presence", kind = "arrived"), DeviceEvent.Presence(false)))
         assertTrue(TriggerMatcher.matches(Trigger("presence"), DeviceEvent.Presence(false)))
     }
+    @Test fun homeWifiCountsAsStrongEvidenceWithAnyHint() { val f = fusion(); assertNull(f.signal(PresenceSignal.Wifi)); assertEquals(DeviceEvent.Presence(true), f.signal(PresenceSignal.Sound)) }
+    @Test fun losingWifiShortensTheDepartureWait() {
+        val f = fusion(); f.signal(PresenceSignal.Face); f.wifiLost(); now = 3 * 60_000; assertEquals(DeviceEvent.Presence(false), f.tick())
+    }
+    @Test fun withoutWifiLossTheLongWaitStillApplies() { val f = fusion(); f.signal(PresenceSignal.Face); now = 3 * 60_000; assertNull(f.tick()) }
+    @Test fun freshEvidenceCancelsTheWifiLossShortcut() {
+        val f = fusion(); f.signal(PresenceSignal.Face); f.wifiLost(); now = 60_000; f.signal(PresenceSignal.Motion); now = 4 * 60_000; assertNull(f.tick())
+    }
 }
