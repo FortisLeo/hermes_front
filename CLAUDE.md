@@ -8,7 +8,6 @@ Kotlin 2.2, AGP 9.3, Compose (BOM in `gradle/libs.versions.toml`), coroutines/Fl
 ## Commands
 - Build: `./gradlew assembleDebug`
 - Unit tests: `./gradlew test testDebugUnitTest` (JVM domain tests + Android unit tests; must pass before any install)
-- Viewer JS tests: `node --test feature/avatar/src/test/js/*.test.mjs`
 - Install + grant: `adb install -r -g app/build/outputs/apk/debug/app-debug.apk`, then `adb push scripts/grant_all.sh /data/local/tmp/ && adb shell su -c 'sh /data/local/tmp/grant_all.sh'` (re-run after every update)
 - Logs: `adb logcat | grep -i deskbot`
 
@@ -22,6 +21,8 @@ Kotlin 2.2, AGP 9.3, Compose (BOM in `gradle/libs.versions.toml`), coroutines/Fl
 :core:schema             shared message models (serialization)
 :core:ui                 shared Compose components + theme
 :core:testing            the ONE shared set of fakes/fixtures
+:engine:vrm              pure-Kotlin VRM engine (parser, rig, poses, VRMA, springs, slots); JVM tests
+:engine:vrmgl            OpenGL ES 3.0 renderer + GL view for the VRM engine
 ```
 Rules (enforced by Gradle module graph, later Konsist):
 - `:core:domain` imports nothing Android and nothing from other modules.

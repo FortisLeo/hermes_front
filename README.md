@@ -118,7 +118,9 @@ Multi-module clean architecture; dependencies point inward.
 | `core/network` | Hermes client (SSE), bridge server and protocol, HTTP/LAN/MQTT/download tools |
 | `core/data` | Android adapters: accessibility, notifications, camera, speech, wake word, sensors, overlays |
 | `core/testing` | The one shared set of fakes |
-| `feature/face` `chat` `voice` `settings` `a2ui` `avatar` | Compose screens; the avatar module hosts three.js + three-vrm in a sandboxed WebView |
+| `engine/vrm` | The in-house VRM engine, pure Kotlin and JVM-tested: GLB/VRM 0.x and 1.0 parser (compact vertex packing, sparse morph targets), rig, pose/animation driver, VRMA clips, spring-bone physics, model slots (active + staged), frame pacing, memory policy |
+| `engine/vrmgl` | The OpenGL ES 3.0 side: toon shader variants, GPU upload, RGB565 textures, bone-texture skinning for GPUs with few uniforms, the GL view |
+| `feature/face` `chat` `voice` `settings` `a2ui` `avatar` | Compose screens; the avatar module drives the native VRM engine (no WebView, no JavaScript) |
 | `hermes-skills/` | The Hermes skills and `tools.txt` |
 | `scripts/` | Setup, permission grants, Termux scripts, verification harnesses, doc generators |
 
@@ -130,7 +132,6 @@ Patterns in use: ports and adapters, strategy and decorator (deny-list and audit
 python3 scripts/verify_recipes.py                   # runs read-only skill recipes on the phone (needs the app's bridge up)
 python3 scripts/verify_hermes.py                    # real Hermes agent tasks end to end (15 of 16 pass)
 python3 scripts/gen_feature_status.py && python3 scripts/gen_docs.py   # regenerate the status and feature docs
-node --test feature/avatar/src/test/js/*.test.mjs                        # avatar viewer tests (texture limit, model slots)
 sh scripts/avatar_stress.sh "/sdcard/Download/Big.vrm" 3                 # import a model N times, check the app survives (needs the phone)
 ```
 `FeatureCoverageTest` enforces that every catalog number has exactly one skill section and that every tool a skill names exists.

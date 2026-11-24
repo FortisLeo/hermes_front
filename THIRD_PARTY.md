@@ -11,9 +11,6 @@ Per CLAUDE.md: permissive licenses only, pinned versions, listed here.
 | kotlinx.serialization / coroutines | JSON and concurrency | 1.9.0 / 1.10.2 | Apache-2.0 | https://github.com/Kotlin |
 | AndroidX (Compose, CameraX, DataStore, Lifecycle) | UI, camera, settings | see gradle/libs.versions.toml | Apache-2.0 | https://developer.android.com/jetpack |
 | MockK, Turbine, JUnit4 | Tests | see gradle/libs.versions.toml | Apache-2.0 / EPL-1.0 | |
-| three.js 0.160.0 (+ GLTFLoader, BufferGeometryUtils) | https://github.com/mrdoob/three.js (npm `three@0.160.0`) | MIT | Bundled unmodified in `feature/avatar/src/main/assets/avatar/lib` for the VRM viewer (#423) |
-| @pixiv/three-vrm 2.1.0 | https://github.com/pixiv/three-vrm (npm `@pixiv/three-vrm@2.1.0`) | MIT | Bundled unmodified, loads and animates VRM models (#423) |
-| @pixiv/three-vrm-animation 2.1.0 | https://github.com/pixiv/three-vrm (npm `@pixiv/three-vrm-animation@2.1.0`) | MIT | Bundled unmodified, plays VRM Animation (.vrma) clips on the avatar |
 | androidx.webkit 1.12.1 | Google | Apache-2.0 | WebViewAssetLoader: serves bundled assets and the avatar folder to the viewer |
 
 Besides the two bundled JS libraries above (license files next to them), no source was copied from other projects; everything else is a dependency.
