@@ -41,7 +41,7 @@ fun AvatarView(
 
     AndroidView(modifier = modifier.fillMaxSize(), factory = { ctx ->
         VrmGlView(ctx, textureBudgetBytes = deviceTextureBudget(ctx)).also { v ->
-            v.clipsDir = clipsDir
+            v.clipsDir = File(clipsDir, "clips")   // clips live in <avatar dir>/clips (the web viewer served them under /model/clips/)
             v.events = object : VrmEvents {
                 override fun onShown(key: String, ms: Long, wasStaged: Boolean) = ev.value.onShown(key, ms, wasStaged)
                 override fun onStaged(key: String, ms: Long) = ev.value.onStaged(key, ms)

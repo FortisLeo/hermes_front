@@ -181,7 +181,7 @@ class VrmGlView(
     })
 
     init {
-        setEGLContextClientVersion(3); setEGLConfigChooser(8, 8, 8, 0, 16, 0); preserveEGLContextOnPause = true
+        setEGLContextClientVersion(3); setEGLConfigChooser(8, 8, 8, 0, 24, 0)   // 24-bit depth: layered hair/cloth shells are millimetres apart and z-fight at 16 bits; preserveEGLContextOnPause = true
         setRenderer(object : Renderer {
             override fun onSurfaceCreated(gl: GL10?, c: EGLConfig?) {
                 try {
@@ -290,7 +290,7 @@ class VrmGlView(
             val r = runCatching {
                 op.check()
                 val glb = Glb.open(spec.file); val asset = VrmParser.parse(glb)
-                if (asset.skins.any { it.joints.size * 3 + 24 > uniformLimit }) throw IllegalStateException("This GPU cannot skin a model with that many joints")
+                
                 val m = onGl(op) { GlModel(asset, config) }; model = m; onGl(op) { m.prewarm() }
                 m.driver.clipSource = clipSource
                 val res = Resident(m, glb, spec); residents.add(res)
@@ -355,7 +355,7 @@ class VrmGlView(
                 m.driver.frame(dt, SystemClock.uptimeMillis(), input); m.rig.update(); if (config.springs) m.springs.step(dt)
                 val poseChanged = m.rig.consumeDirty() || !m.springs.settled
                 m.updateMorphs()
-                Mat4.perspective(f.fovY, width.toFloat() / height, 0.1f, 20f, proj); Mat4.lookAt(f.eyeX, f.eyeY, f.eyeZ, f.targetX, f.targetY, f.targetZ, viewM); Mat4.mul(proj, 0, viewM, 0, vp, 0)
+                val camDist = Math.abs(f.eyeZ - f.targetZ); Mat4.perspective(f.fovY, width.toFloat() / height, maxOf(0.05f, camDist - 1.5f), camDist + 3f, proj); Mat4.lookAt(f.eyeX, f.eyeY, f.eyeZ, f.targetX, f.targetY, f.targetZ, viewM); Mat4.mul(proj, 0, viewM, 0, vp, 0)
                 m.draw(vp, light, poseChanged)
                 if (++headTick % 6 == 0) reportHead(m, f)
             }

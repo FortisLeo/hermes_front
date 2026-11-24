@@ -33,6 +33,7 @@ internal class GlProgram(vertex: String, fragment: String, val label: String = "
         if (locs[ShaderSources.U_BASE_TEX] >= 0) GLES30.glUniform1i(locs[ShaderSources.U_BASE_TEX], 0)
         if (locs[ShaderSources.U_SHADE_TEX] >= 0) GLES30.glUniform1i(locs[ShaderSources.U_SHADE_TEX], 1)
         if (locs[ShaderSources.U_EM_TEX] >= 0) GLES30.glUniform1i(locs[ShaderSources.U_EM_TEX], 2)
+        if (locs[ShaderSources.U_BONE_TEX] >= 0) GLES30.glUniform1i(locs[ShaderSources.U_BONE_TEX], 3)
         GLES30.glUseProgram(0)
     }
 

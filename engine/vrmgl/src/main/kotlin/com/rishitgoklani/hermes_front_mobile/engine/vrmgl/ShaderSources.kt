@@ -38,7 +38,10 @@ internal object ShaderSources {
 
     fun vertex(flags: Int, skinned: Boolean, maxJoints: Int): String = buildString {
         append("#version 300 es\n").append(defines(flags))
-        if (skinned) append("#define SKINNED\n#define MAXJ ${maxOf(1, maxJoints)}\n")
+        // A negative maxJoints means "bones in a float texture": GPUs that report few vertex uniform vectors (256 on some Adreno)
+        // cannot hold a 100+ joint skeleton as a uniform array.
+        if (skinned) append("#define SKINNED\n#define MAXJ ${maxOf(1, kotlin.math.abs(maxJoints))}\n")
+        if (skinned && maxJoints < 0) append("#define BONE_TEX\n")
         append("""
         layout(location=0) in vec3 aPos;
         layout(location=1) in vec4 aNormal;
@@ -46,9 +49,18 @@ internal object ShaderSources {
         #ifdef SKINNED
         layout(location=3) in uvec4 aJoints;
         layout(location=4) in vec4 aWeights;
+        #ifdef BONE_TEX
+        uniform highp sampler2D uBoneTex;
+        #else
         uniform vec4 uBones[3 * MAXJ];
+        #endif
         void bone(uint j, float w, vec4 pp, vec3 n, inout vec3 sp, inout vec3 sn) {
-            int b = int(j) * 3; vec4 r0 = uBones[b]; vec4 r1 = uBones[b + 1]; vec4 r2 = uBones[b + 2];
+            int b = int(j) * 3;
+        #ifdef BONE_TEX
+            vec4 r0 = texelFetch(uBoneTex, ivec2(b, 0), 0); vec4 r1 = texelFetch(uBoneTex, ivec2(b + 1, 0), 0); vec4 r2 = texelFetch(uBoneTex, ivec2(b + 2, 0), 0);
+        #else
+            vec4 r0 = uBones[b]; vec4 r1 = uBones[b + 1]; vec4 r2 = uBones[b + 2];
+        #endif
             sp += w * vec3(dot(r0, pp), dot(r1, pp), dot(r2, pp));
             sn += w * vec3(dot(r0.xyz, n), dot(r1.xyz, n), dot(r2.xyz, n));
         }
@@ -144,9 +156,9 @@ internal object ShaderSources {
     }
 
     /** Uniform names in slot order; GlProgram resolves each location once at link time. uToony carries the precomputed edge half-width. */
-    val UNIFORMS = arrayOf("uVP", "uModel", "uLight", "uBase", "uShade", "uEmissive", "uOutlineColor", "uShift", "uToony", "uCutoff", "uOutline", "uBones", "uBaseTex", "uShadeTex", "uEmTex")
+    val UNIFORMS = arrayOf("uVP", "uModel", "uLight", "uBase", "uShade", "uEmissive", "uOutlineColor", "uShift", "uToony", "uCutoff", "uOutline", "uBones", "uBaseTex", "uShadeTex", "uEmTex", "uBoneTex")
     const val U_VP = 0; const val U_MODEL = 1; const val U_LIGHT = 2; const val U_BASE = 3; const val U_SHADE = 4; const val U_EMISSIVE = 5; const val U_OUTLINE_COLOR = 6
-    const val U_SHIFT = 7; const val U_TOONY = 8; const val U_CUTOFF = 9; const val U_OUTLINE = 10; const val U_BONES = 11; const val U_BASE_TEX = 12; const val U_SHADE_TEX = 13; const val U_EM_TEX = 14
+    const val U_SHIFT = 7; const val U_TOONY = 8; const val U_CUTOFF = 9; const val U_OUTLINE = 10; const val U_BONES = 11; const val U_BASE_TEX = 12; const val U_SHADE_TEX = 13; const val U_EM_TEX = 14; const val U_BONE_TEX = 15
     /** Float count of the shadow copy per slot (0 = not shadow-cached). */
-    val SHADOW_SIZES = intArrayOf(16, 16, 3, 4, 3, 3, 3, 1, 1, 1, 1, 0, 0, 0, 0)
+    val SHADOW_SIZES = intArrayOf(16, 16, 3, 4, 3, 3, 3, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 }

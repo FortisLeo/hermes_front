@@ -37,6 +37,11 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
     private val gpu = ArrayList<Gpu>(); private val textures = IntArray(asset.images.size)
     private val skinRows = asset.skins.map { FloatArray(it.joints.size * 12) }
     private val skinStamps = LongArray(asset.skins.size) { -1L }
+    /** Bones go into a float texture when the GPU's uniform space cannot hold them (some Adreno report only 256 vectors). */
+    private val boneTexMode: Boolean = run { val v = IntArray(1); GLES30.glGetIntegerv(GLES30.GL_MAX_VERTEX_UNIFORM_VECTORS, v, 0); maxJoints * 3 + 24 > v[0] || FORCE_BONE_TEX }
+    private val boneTex = IntArray(asset.skins.size); private val boneTexStamp = LongArray(asset.skins.size) { -1L }
+    private val boneBuf: java.nio.FloatBuffer = java.nio.ByteBuffer.allocateDirect(maxJoints.coerceAtLeast(1) * 48).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+    private val programJoints get() = if (boneTexMode) -maxJoints else maxJoints
     private var texVersion = 0
     private val materials = asset.materials.map { MaterialMath.compile(it) }
     private val morphPrims: IntArray
@@ -153,6 +158,24 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
         Trace.endSection()
     }
 
+    /** Uploads one skin's bone rows (3 RGBA32F texels per joint, one row) when they changed; returns the bytes sent. */
+    private fun uploadBoneTexture(skin: Int, stamp: Long): Int {
+        val joints = asset.skins[skin].joints.size
+        if (boneTex[skin] == 0) {
+            val id = IntArray(1); GLES30.glGenTextures(1, id, 0); boneTex[skin] = id[0]
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE3); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id[0])
+            GLES30.glTexStorage2D(GLES30.GL_TEXTURE_2D, 1, GLES30.GL_RGBA32F, joints * 3, 1)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        }
+        if (boneTexStamp[skin] == stamp) return 0
+        boneTexStamp[skin] = stamp
+        boneBuf.clear(); boneBuf.put(skinRows[skin], 0, joints * 12); boneBuf.position(0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE3); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, boneTex[skin])
+        GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, 0, joints * 3, 1, GLES30.GL_RGBA, GLES30.GL_FLOAT, boneBuf)
+        return joints * 48
+    }
+
     private fun resolvePrograms() {
         for ((idx, item) in plan.withIndex()) {
             val p = asset.primitives[item.primitive]; val mat = material(p.material)
@@ -162,7 +185,7 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
             if (tex(mat.shadeImage) != 0) flags = flags or ShaderSources.FLAG_SHADE_TEX
             if (tex(mat.emissiveImage) != 0) flags = flags or ShaderSources.FLAG_EMISSIVE_TEX
             flags = ShaderSources.normalize(flags); itemFlags[idx] = flags
-            itemProgram[idx] = programs.get(flags, p.skinned, maxJoints)
+            itemProgram[idx] = programs.get(flags, p.skinned, programJoints)
         }
         itemVersion = texVersion
     }
@@ -189,7 +212,8 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
                 if (p.skinned) {
                     prog.setMat4(ShaderSources.U_MODEL, rig.modelMatrix)
                     val stamp = skinStamps[p.skin]
-                    if (prog.boneStamp != stamp) { val j = asset.skins[p.skin].joints.size; prog.setBones(skinRows[p.skin], j); prog.boneStamp = stamp; bytes += j * 48 }
+                    if (boneTexMode) { bytes += uploadBoneTexture(p.skin, stamp); GLES30.glActiveTexture(GLES30.GL_TEXTURE3); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, boneTex[p.skin]); activeUnit = -1; boundTex.fill(-1) }
+                    else if (prog.boneStamp != stamp) { val j = asset.skins[p.skin].joints.size; prog.setBones(skinRows[p.skin], j); prog.boneStamp = stamp; bytes += j * 48 }
                 } else { Mat4.mul(rig.modelMatrix, 0, rig.world, p.node * 16, nodeModel, 0); prog.setMat4(ShaderSources.U_MODEL, nodeModel) }
                 if (outline) { prog.setVec3(ShaderSources.U_OUTLINE_COLOR, mat.outlineColor); prog.setFloat(ShaderSources.U_OUTLINE, mat.outlineWidth) }
                 else {
@@ -237,7 +261,7 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
 
     fun release() {
         for (g in gpu) { GLES30.glDeleteVertexArrays(g.vao.size, g.vao, 0); GLES30.glDeleteBuffers(g.pos.size, g.pos, 0); GLES30.glDeleteBuffers(2, intArrayOf(g.attr, g.ibo), 0) }
-        gpu.clear(); GLES30.glDeleteTextures(textures.size, textures, 0)
+        gpu.clear(); GLES30.glDeleteTextures(textures.size, textures, 0); GLES30.glDeleteTextures(boneTex.size, boneTex, 0)
         if (ownsPrograms) programs.release()
     }
 
@@ -253,3 +277,6 @@ internal object GlErrors {
         if (e != 0) throw IllegalStateException("GL error 0x${Integer.toHexString(e)} during $what")
     }
 }
+
+/** Debug switch used to compare the two skinning paths on one model. */
+internal const val FORCE_BONE_TEX = false
