@@ -50,43 +50,40 @@ import kotlin.math.sin
 
 private const val BARS = 11
 private val UserColors = listOf(Color(0xFF4285F4), Color(0xFF8AB4F8))        // blue: you are speaking
-private val BotColors = listOf(Color(0xFF9B72CB), Color(0xFFD96570))         // purple to coral: the bot is speaking
 private val QuietColors = listOf(Color(0xFF8AB4F8), Color(0xFF8AB4F8)).map { it.copy(alpha = 0.55f) }
 
 /**
- * Bottom-corner voice indicator in the style of Gemini Live: a dark pill with a scrolling bar histogram of how loud the user is (blue) or the bot is (purple to coral),
- * a slow wave while it thinks, and almost flat when it is just listening. Appears only while a live conversation is running.
- * The levels are collected here so only this small pill recomposes at microphone rate.
+ * Bottom-corner voice indicator in the style of Gemini Live: a dark pill with a scrolling bar histogram of how loud the USER is (blue); almost flat when nothing is heard.
+ * It draws the microphone only, never the speaker. Appears only while a live conversation is running.
+ * The level is collected here so only this small pill recomposes at microphone rate.
  */
 @Composable
-fun LiveWave(active: StateFlow<Boolean>, mic: StateFlow<Float>, bot: StateFlow<Float>, working: Boolean, modifier: Modifier = Modifier) {
+fun LiveWave(active: StateFlow<Boolean>, mic: StateFlow<Float>, modifier: Modifier = Modifier) {
     val on by active.collectAsState()
     AnimatedVisibility(
         visible = on, modifier = modifier,
         enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 2 },
         exit = fadeOut(tween(160)) + slideOutVertically(tween(180)) { it / 2 },
-    ) { WavePill(mic, bot, working) }
+    ) { WavePill(mic) }
 }
 
 @Composable
-private fun WavePill(mic: StateFlow<Float>, bot: StateFlow<Float>, working: Boolean) {
+private fun WavePill(mic: StateFlow<Float>) {
     val micLevel by mic.collectAsState()
-    val botLevel by bot.collectAsState()
-    val mode = WaveModel.mode(active = true, mic = micLevel, bot = botLevel, working = working)
-    val level = when (mode) { WaveMode.User -> micLevel; WaveMode.Bot -> botLevel; else -> 0f }
+    val mode = WaveModel.mode(active = true, mic = micLevel)
+    val level = if (mode == WaveMode.User) micLevel else 0f
 
     var history by remember { mutableStateOf(List(BARS) { 0f }) }
     val latest by rememberUpdatedState(level)
     LaunchedEffect(Unit) { while (true) { history = WaveModel.push(history, latest, BARS); delay(55) } }
 
     val phase by rememberInfiniteTransition(label = "wave").animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart), label = "phase")
-    val colors = when (mode) { WaveMode.User -> UserColors; WaveMode.Bot -> BotColors; else -> QuietColors }
-    val description = when (mode) { WaveMode.User -> "You are speaking"; WaveMode.Bot -> "Assistant is speaking"; WaveMode.Thinking -> "Assistant is thinking"; else -> "Listening" }
+    val colors = if (mode == WaveMode.User) UserColors else QuietColors
+    val description = if (mode == WaveMode.User) "You are speaking" else "Listening"
 
     val heights = List(BARS) { i ->
         val target = when (mode) {
-            WaveMode.User, WaveMode.Bot -> WaveModel.barHeight(history[i])
-            WaveMode.Thinking -> 0.3f + 0.22f * sin(2 * PI * (phase + i / BARS.toFloat())).toFloat()
+            WaveMode.User -> WaveModel.barHeight(history[i])
             else -> 0.12f + 0.035f * sin(2 * PI * (phase + i / BARS.toFloat())).toFloat()
         }
         animateFloatAsState(target, tween(90), label = "bar$i").value
@@ -112,21 +109,19 @@ private fun WavePill(mic: StateFlow<Float>, bot: StateFlow<Float>, working: Bool
 }
 
 /**
- * Debug-only driver that makes the wave move without a microphone or a session: you speak, the bot answers, then a quiet moment, on repeat.
+ * Debug-only driver that makes the wave move without a microphone or a session: bursts of speech with quiet gaps, on repeat.
  * Used to check the look of the indicator on a device.
  */
 class WaveDemo(scope: CoroutineScope) {
     val active = MutableStateFlow(true)
     val mic = MutableStateFlow(0f)
-    val bot = MutableStateFlow(0f)
     init {
         scope.launch {
             var t = 0
             while (true) {
-                val s = (t / 20) % 8 // 20 ticks of 50 ms = 1 s
+                val speaking = (t / 20) % 4 < 2 // 1 s ticks of 20 x 50 ms: two seconds of speech, two quiet
                 val env = (0.5 + 0.5 * sin(t * 0.55)).toFloat() * (0.5f + 0.5f * sin(t * 0.23 + 1).toFloat().coerceAtLeast(0f))
-                mic.value = if (s in 0..2) (0.15f + 0.6f * env).coerceIn(0f, 1f) else 0f
-                bot.value = if (s in 4..6) (0.1f + 0.5f * env).coerceIn(0f, 1f) else 0f
+                mic.value = if (speaking) (0.15f + 0.6f * env).coerceIn(0f, 1f) else 0f
                 t++; delay(50)
             }
         }

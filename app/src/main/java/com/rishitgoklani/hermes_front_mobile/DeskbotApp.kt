@@ -155,9 +155,8 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
             prompt = { val p = activePersona; com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.build(p?.name ?: "Deskbot", p?.tone.orEmpty(), p?.description.orEmpty()) },
             frame = { facing -> camera.capture(facing, 140_000) }, audit = audit, log = apiLog)
     }
-    /** What the bottom-right wave shows: whether a live conversation runs, how loud the user is, how loud the bot is. */
+    /** What the bottom-right wave shows: whether a live conversation runs and how loud the user is (the microphone only). */
     val liveActivity: com.rishitgoklani.hermes_front_mobile.domain.live.LiveActivity get() = liveRun
-    val liveOutLevel: StateFlow<Float> get() = liveOut.level
     private val liveLoop = com.rishitgoklani.hermes_front_mobile.domain.voice.LiveConversationLoop(VoskKeywordSpotter(modelStore), { liveRun }, VoiceLoopConfig(),
         onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") },
         onError = { android.util.Log.w("DeskbotLive", "session failed: ${it.message}") })

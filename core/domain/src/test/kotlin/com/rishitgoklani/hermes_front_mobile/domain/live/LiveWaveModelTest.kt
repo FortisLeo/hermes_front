@@ -4,16 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LiveWaveModelTest {
-    private fun mode(active: Boolean = true, mic: Float = 0f, bot: Float = 0f, working: Boolean = false) = WaveModel.mode(active, mic, bot, working)
+    private fun mode(active: Boolean = true, mic: Float = 0f) = WaveModel.mode(active, mic)
 
-    @Test fun hiddenWhenNoConversationIsRunning() = assertEquals(WaveMode.Hidden, mode(active = false, mic = 1f, bot = 1f))
+    @Test fun hiddenWhenNoConversationIsRunning() = assertEquals(WaveMode.Hidden, mode(active = false, mic = 1f))
     @Test fun userWhenTheMicIsLoud() = assertEquals(WaveMode.User, mode(mic = 0.3f))
     @Test fun roomNoiseDoesNotCountAsSpeech() = assertEquals(WaveMode.Idle, mode(mic = 0.03f))
-    @Test fun botWhenItsVoiceIsSounding() = assertEquals(WaveMode.Bot, mode(bot = 0.2f))
-    @Test fun theBotWinsWhenBothAreLoud() = assertEquals(WaveMode.Bot, mode(mic = 0.5f, bot = 0.5f))
-    @Test fun thinkingWhenWorkingAndQuiet() = assertEquals(WaveMode.Thinking, mode(working = true))
-    @Test fun speakingBeatsThinking() = assertEquals(WaveMode.User, mode(mic = 0.4f, working = true))
-    @Test fun quietAndIdleStaysIdle() = assertEquals(WaveMode.Idle, mode())
+    @Test fun quietStaysIdle() = assertEquals(WaveMode.Idle, mode())
+    @Test fun theThresholdItselfCountsAsSpeech() = assertEquals(WaveMode.User, mode(mic = WaveModel.SPEECH_THRESHOLD))
 
     @Test fun historyScrollsAndDropsTheOldest() = assertEquals(listOf(0.2f, 0.3f, 0.4f), WaveModel.push(listOf(0.1f, 0.2f, 0.3f), 0.4f, 3))
     @Test fun historyClampsLevels() = assertEquals(listOf(1f, 0f), WaveModel.push(listOf(1f), -2f, 5).let { listOf(WaveModel.push(emptyList(), 7f, 5).single(), it.last()) })

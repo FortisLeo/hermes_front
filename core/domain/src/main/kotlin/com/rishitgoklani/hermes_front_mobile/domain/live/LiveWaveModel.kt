@@ -9,20 +9,17 @@ interface LiveActivity {
     val micLevel: StateFlow<Float>
 }
 
-/** Who the wave is showing. */
-enum class WaveMode { Hidden, User, Bot, Thinking, Idle }
+/** What the wave shows: nothing, the user speaking, or a quiet microphone. Only the microphone is ever drawn, never the speaker. */
+enum class WaveMode { Hidden, User, Idle }
 
 /** Pure logic behind the wave indicator (kept out of the composable so it can be tested). */
 object WaveModel {
     /** Above this mic level the user counts as speaking; speech is about 0.1..0.6 after scaling, room noise stays well below. */
     const val SPEECH_THRESHOLD = 0.08f
-    const val BOT_THRESHOLD = 0.04f
 
-    fun mode(active: Boolean, mic: Float, bot: Float, working: Boolean): WaveMode = when {
+    fun mode(active: Boolean, mic: Float): WaveMode = when {
         !active -> WaveMode.Hidden
-        bot >= BOT_THRESHOLD -> WaveMode.Bot
         mic >= SPEECH_THRESHOLD -> WaveMode.User
-        working -> WaveMode.Thinking
         else -> WaveMode.Idle
     }
 

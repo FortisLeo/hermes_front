@@ -33,7 +33,7 @@ Debug has an "API calls" tab listing every exchange, newest first, with source f
 The log is in memory only (300 entries, 4,000 characters per field), so it is empty after the app restarts. Keys and tokens are masked (`ApiRedactor`) and long base64 payloads are collapsed.
 
 ## Voice wave (bottom right)
-While a live conversation runs, a pill in the bottom-right corner (above every screen) shows a scrolling bar histogram in the style of Gemini Live's bottom visualizer: blue bars follow the loudness of the user's microphone, purple-to-coral bars follow the bot's voice, a slow wave shows while it is thinking or running a tool, and near-flat bars mean it is listening. It is hidden when no conversation is running. In half-duplex mode (default) the mic reads as muted while the bot talks.
-- Logic: `WaveModel` (mode, history, bar height) and `RunLiveSession.micLevel/active` in `:core:domain`; drawing: `LiveWave` in `:feature:voice`. Levels are collected inside the pill so only it redraws at mic rate.
+While a live conversation runs, a pill in the bottom-right corner (above every screen) shows a scrolling bar histogram in the style of Gemini Live's bottom visualizer. It draws the user's microphone only, never the speaker: blue bars follow how loud you are, near-flat bars mean nothing is heard. It is hidden when no conversation is running. In half-duplex mode (default) the mic reads as muted while the bot talks, so the bars stay flat then.
+- Logic: `WaveModel` (mode, history, bar height) and `RunLiveSession.micLevel/active` in `:core:domain`; drawing: `LiveWave` in `:feature:voice`. The level is collected inside the pill so only it redraws at mic rate.
 - Tuning: `RunLiveSession.MIC_GAIN` (mic scaling) and `WaveModel.SPEECH_THRESHOLD`.
 - Debug builds can preview it without a session: `adb shell am start -n com.rishitgoklani.hermes_front_mobile/.MainActivity --ez wave_demo true`.

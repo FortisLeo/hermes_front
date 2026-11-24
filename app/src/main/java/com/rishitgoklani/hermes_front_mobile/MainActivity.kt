@@ -246,11 +246,11 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                // Voice indicator (bottom right): a wave of the user's voice while a live conversation runs. Debug builds can preview it with --ez wave_demo true.
+                // Voice indicator (bottom right): a wave of the USER's microphone while a live conversation runs (never the speaker). Debug builds can preview it with --ez wave_demo true.
                 val waveDemo = androidx.compose.runtime.remember { if (BuildConfig.DEBUG && intent?.getBooleanExtra("wave_demo", false) == true) com.rishitgoklani.hermes_front_mobile.ui.voice.WaveDemo(scope) else null }
                 com.rishitgoklani.hermes_front_mobile.ui.voice.LiveWave(
-                    waveDemo?.active ?: container.liveActivity.active, waveDemo?.mic ?: container.liveActivity.micLevel, waveDemo?.bot ?: container.liveOutLevel,
-                    working = bot == BotState.Thinking || bot == BotState.Working, modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 64.dp))
+                    waveDemo?.active ?: container.liveActivity.active, waveDemo?.mic ?: container.liveActivity.micLevel,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 64.dp))
             }
         }
         val intro by onboarding.state.collectAsStateWithLifecycle()
