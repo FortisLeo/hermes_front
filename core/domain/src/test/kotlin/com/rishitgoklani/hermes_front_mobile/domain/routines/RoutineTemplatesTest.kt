@@ -56,7 +56,7 @@ class RoutineTemplatesTest {
         val calls = mutableListOf<String>()
         val caps = listOf("dnd", "screen_dim", "brightness", "tts_say", "timer_start", "focus_filter").map { n -> Capability(n, "") { calls += "$n ${it}"; ActionResult.completed() } }
         val run = RunCapability(CapabilityRegistry(caps))
-        return Triple(TemplateRunner(templates, run, scope) { kotlinx.coroutines.delay(it) }, calls, run)
+        return Triple(TemplateRunner(templates, { run }, scope) { kotlinx.coroutines.delay(it) }, calls, run)
     }
 
     @Test fun runnerExecutesFocusStepsAndEndsAfterDelay() = runTest {

@@ -91,7 +91,7 @@ class RoutineTemplateRegistry(templates: List<RoutineTemplate> = emptyList()) {
 }
 
 /** Runs a template's steps in the background through the normal capability path; a second run of the same template replaces the first. */
-class TemplateRunner(private val registry: RoutineTemplateRegistry, private val run: RunCapability, private val scope: CoroutineScope, private val pause: suspend (Long) -> Unit = { delay(it) }) {
+class TemplateRunner(private val registry: RoutineTemplateRegistry, private val run: () -> RunCapability, private val scope: CoroutineScope, private val pause: suspend (Long) -> Unit = { delay(it) }) {
     private val jobs = HashMap<String, Job>()
     val results = mutableListOf<String>()
 
@@ -103,7 +103,7 @@ class TemplateRunner(private val registry: RoutineTemplateRegistry, private val 
         jobs[id] = scope.launch {
             for (s in steps) {
                 if (s.delayBeforeMs > 0) pause(s.delayBeforeMs)
-                results += "${s.tool}:${run(s.tool, s.args).status}"
+                results += "${s.tool}:${run()(s.tool, s.args).status}"
             }
             synchronized(this@TemplateRunner) { jobs.remove(id) }
         }
@@ -111,7 +111,7 @@ class TemplateRunner(private val registry: RoutineTemplateRegistry, private val 
     }
     @Synchronized fun cancel(id: String): Boolean {
         val job = jobs.remove(id) ?: return false
-        job.cancel(); registry.get(id)?.cleanup()?.takeIf { it.isNotEmpty() }?.let { steps -> scope.launch { steps.forEach { results += "${it.tool}:${run(it.tool, it.args).status}" } } }
+        job.cancel(); registry.get(id)?.cleanup()?.takeIf { it.isNotEmpty() }?.let { steps -> scope.launch { steps.forEach { results += "${it.tool}:${run()(it.tool, it.args).status}" } } }
         return true
     }
     @Synchronized fun running(): Set<String> = jobs.filterValues { it.isActive }.keys
