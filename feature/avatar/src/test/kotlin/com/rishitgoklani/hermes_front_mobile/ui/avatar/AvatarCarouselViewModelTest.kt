@@ -9,6 +9,7 @@ import com.rishitgoklani.hermes_front_mobile.domain.avatar.library.SelectAvatar
 import com.rishitgoklani.hermes_front_mobile.testing.FakeActiveSlotStore
 import com.rishitgoklani.hermes_front_mobile.testing.FakeAvatarFiles
 import com.rishitgoklani.hermes_front_mobile.testing.FakeAvatarLibrary
+import com.rishitgoklani.hermes_front_mobile.testing.FakeNativeGlSwitch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -31,10 +32,10 @@ class AvatarCarouselViewModelTest {
     private fun e(id: String, added: Long, tex: Long = 10_000_000, status: AvatarStatus = AvatarStatus.OK, thumb: String? = null) =
         AvatarEntry(id, id, AvatarSource.UPLOAD, "CC0", "a", 1, 1, 512, tex, null, thumb, added, added, status)
 
-    private class Rig(entries: List<AvatarEntry>, slot: AvatarSlot = AvatarSlot.Eyes, lowMem: Boolean = false, snap: AvatarSnapshots? = null) {
+    private class Rig(entries: List<AvatarEntry>, slot: AvatarSlot = AvatarSlot.Eyes, lowMem: Boolean = false, snap: AvatarSnapshots? = null, val gl: FakeNativeGlSwitch = FakeNativeGlSwitch()) {
         val lib = FakeAvatarLibrary(entries); val active = FakeActiveSlotStore(slot); val files = FakeAvatarFiles().also { f -> kotlinx.coroutines.runBlocking { entries.forEach { f.write(it.id, byteArrayOf(1)) } } }
         val proven = mutableListOf<String>()
-        val vm = AvatarCarouselViewModel(lib, active, files, CycleAvatar(lib, active, SelectAvatar(lib, active) { 5 }), { proven += it }, snap, { lowMem }, thumbDelayMs = 0)
+        val vm = AvatarCarouselViewModel(lib, active, files, CycleAvatar(lib, active, SelectAvatar(lib, active) { 5 }), { proven += it }, snap, { lowMem }, thumbDelayMs = 0, nativeGl = gl)
     }
 
     @Test fun eyesSlotRequestsNothing() = runTest {
@@ -69,5 +70,34 @@ class AvatarCarouselViewModelTest {
         val r = Rig(listOf(e("a", 1)), AvatarSlot.Model("a"), snap = snaps); advanceUntilIdle(); r.vm.onShown("a", 1, false); advanceUntilIdle()
         assertEquals("/fake/thumbs/a.png", r.lib.get("a")!!.thumbPath); assertEquals(1, r.files.thumbs.size)
         r.files.thumbs.clear(); r.vm.onShown("a", 1, true); advanceUntilIdle(); assertTrue(r.files.thumbs.isEmpty())
+    }
+
+    @Test fun fatalMarksTheShownModelBrokenFallsBackToEyesAndPersistsTheFlag() = runTest {
+        val r = Rig(listOf(e("a", 1), e("b", 2)), AvatarSlot.Model("a")); advanceUntilIdle(); r.vm.onShown("a", 1, false); advanceUntilIdle()
+        r.vm.onFatal("shader failed"); advanceUntilIdle()
+        assertEquals(AvatarStatus.BROKEN, r.lib.get("a")!!.status); assertEquals(AvatarSlot.Eyes, r.active.current()); assertTrue(r.gl.value)
+        val ui = r.vm.ui.value; assertTrue(ui.nativeDisabled); assertNull(ui.active); assertNull(ui.staged); assertTrue(!ui.ready)
+    }
+    @Test fun aPersistedFlagMeansNothingIsRequestedFromTheGpuOnTheNextLaunch() = runTest {
+        val r = Rig(listOf(e("a", 1)), AvatarSlot.Model("a"), gl = FakeNativeGlSwitch(true)); advanceUntilIdle()
+        assertTrue(r.vm.ui.value.nativeDisabled); assertNull(r.vm.ui.value.active)
+    }
+    @Test fun nothingIsRequestedUntilTheFlagHasBeenRead() = runTest {
+        val r = Rig(listOf(e("a", 1)), AvatarSlot.Model("a")); assertNull(r.vm.ui.value.active); advanceUntilIdle(); assertEquals("a", r.vm.ui.value.active!!.key)
+    }
+    @Test fun retryReenablesNativeAndRestoresTheModelThatFailed() = runTest {
+        val r = Rig(listOf(e("a", 1)), AvatarSlot.Model("a")); advanceUntilIdle(); r.vm.onShown("a", 1, false); advanceUntilIdle()
+        r.vm.onFatal("egl"); advanceUntilIdle(); r.vm.retryNative(); advanceUntilIdle()
+        assertTrue(!r.gl.value); assertTrue(!r.vm.ui.value.nativeDisabled); assertEquals(AvatarStatus.OK, r.lib.get("a")!!.status)
+        r.vm.swipeNext(); advanceUntilIdle(); assertEquals(AvatarSlot.Model("a"), r.vm.ui.value.slot); assertEquals("a", r.vm.ui.value.active!!.key)
+    }
+    @Test fun repeatedErrorsWithoutASuccessSwitchNativeOff() = runTest {
+        val r = Rig(listOf(e("a", 1), e("b", 2), e("c", 3)), AvatarSlot.Model("a")); advanceUntilIdle()
+        r.vm.onError("a", "x"); r.vm.onError("b", "x"); advanceUntilIdle(); assertTrue(!r.gl.value); assertTrue(!r.vm.ui.value.nativeDisabled)
+        r.vm.onError("c", "x"); advanceUntilIdle(); assertTrue(r.gl.value); assertTrue(r.vm.ui.value.nativeDisabled)
+    }
+    @Test fun aSuccessfulShowResetsTheErrorCount() = runTest {
+        val r = Rig(listOf(e("a", 1), e("b", 2), e("c", 3)), AvatarSlot.Model("c")); advanceUntilIdle()
+        r.vm.onError("a", "x"); r.vm.onError("b", "x"); r.vm.onShown("c", 1, false); r.vm.onError("a", "x"); r.vm.onError("b", "x"); advanceUntilIdle(); assertTrue(!r.gl.value)
     }
 }
