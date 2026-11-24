@@ -133,6 +133,8 @@ python3 scripts/verify_recipes.py                   # runs read-only skill recip
 python3 scripts/verify_hermes.py                    # real Hermes agent tasks end to end (15 of 16 pass)
 python3 scripts/gen_feature_status.py && python3 scripts/gen_docs.py   # regenerate the status and feature docs
 sh scripts/avatar_stress.sh "/sdcard/Download/Big.vrm" 3                 # import a model N times, check the app survives (needs the phone)
+sh scripts/avatar_golden.sh <library-id> <name>                       # pose the avatar and compare screenshots with docs/golden (needs the phone)
+sh scripts/termux/test_watchdog_lib.sh                                # watchdog decision logic (any machine)
 ```
 `FeatureCoverageTest` enforces that every catalog number has exactly one skill section and that every tool a skill names exists.
 

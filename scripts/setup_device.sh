@@ -30,9 +30,9 @@ rm -rf .tmp/skills-stage && mkdir -p .tmp/skills-stage && cp -r hermes-skills/de
 root "U=\$(stat -c %u $TERMUX/home); mkdir -p $TERMUX/home/.hermes/skills && rm -rf $TERMUX/home/.hermes/skills/deskbot && cp -r /data/local/tmp/skills-deskbot $TERMUX/home/.hermes/skills/deskbot && chown -R \$U:\$U $TERMUX/home/.hermes/skills/deskbot && echo placed" | grep -q placed && ok "skills installed in ~/.hermes/skills/deskbot" || fail "skills"
 
 step "termux scripts"
-for f in watchdog boot; do adb push scripts/termux/$f.sh /data/local/tmp/$f.sh >/dev/null; done
+for f in watchdog watchdog_lib boot; do adb push scripts/termux/$f.sh /data/local/tmp/$f.sh >/dev/null; done
 adb push scripts/termux/setup_packages.sh /data/local/tmp/setup_packages.sh >/dev/null
-root "U=\$(stat -c %u $TERMUX/home); mkdir -p $TERMUX/home/bin $TERMUX/home/.termux/boot; cp /data/local/tmp/watchdog.sh $TERMUX/home/bin/deskbot-watchdog.sh; cp /data/local/tmp/boot.sh $TERMUX/home/.termux/boot/10-deskbot.sh; cp /data/local/tmp/boot.sh $TERMUX/home/bin/deskbot-up; cp /data/local/tmp/setup_packages.sh $TERMUX/home/bin/setup_packages.sh; chown -R \$U:\$U $TERMUX/home/bin $TERMUX/home/.termux/boot; chmod 755 $TERMUX/home/bin/* $TERMUX/home/.termux/boot/*; echo placed" | grep -q placed && ok "watchdog + boot + package scripts placed (boot script needs the Termux:Boot app to run at boot)" || fail "termux scripts"
+root "U=\$(stat -c %u $TERMUX/home); mkdir -p $TERMUX/home/bin $TERMUX/home/.termux/boot; cp /data/local/tmp/watchdog.sh $TERMUX/home/bin/deskbot-watchdog.sh; cp /data/local/tmp/watchdog_lib.sh $TERMUX/home/bin/watchdog_lib.sh; cp /data/local/tmp/boot.sh $TERMUX/home/.termux/boot/10-deskbot.sh; cp /data/local/tmp/boot.sh $TERMUX/home/bin/deskbot-up; cp /data/local/tmp/setup_packages.sh $TERMUX/home/bin/setup_packages.sh; chown -R \$U:\$U $TERMUX/home/bin $TERMUX/home/.termux/boot; chmod 755 $TERMUX/home/bin/* $TERMUX/home/.termux/boot/*; echo placed" | grep -q placed && ok "watchdog + boot + package scripts placed (boot script needs the Termux:Boot app to run at boot)" || fail "termux scripts"
 if [ "$PKGS" = 1 ]; then
   step "termux packages (backs up ~/.hermes first)"
   adb push scripts/termux/run_in_termux.sh /data/local/tmp/run_in_termux.sh >/dev/null
