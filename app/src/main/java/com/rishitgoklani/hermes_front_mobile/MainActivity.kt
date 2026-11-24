@@ -41,6 +41,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.size
+import com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingScreen
+import com.rishitgoklani.hermes_front_mobile.ui.onboarding.PermissionGroup
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -80,11 +88,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val onboarding by lazy { container.onboardingViewModel(this) }
+    private val permissionsAsked = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { refreshPermissions() }
+
+    private fun androidPermission(g: PermissionGroup): String? = when (g) {
+        PermissionGroup.Microphone -> android.Manifest.permission.RECORD_AUDIO
+        PermissionGroup.Camera -> android.Manifest.permission.CAMERA
+        PermissionGroup.Notifications -> if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
+    }
+    private fun isGranted(g: PermissionGroup) = androidPermission(g)?.let { checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED } ?: true
+    private fun refreshPermissions() = onboarding.setPermissions(PermissionGroup.entries.associateWith(::isGranted))
+    /** Asks only for what is still missing, and only the groups the intro explained. */
+    private fun requestMissingPermissions() { val missing = PermissionGroup.entries.filter { !isGranted(it) }.mapNotNull(::androidPermission); if (missing.isNotEmpty()) permissionsAsked.launch(missing.toTypedArray()) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         enterImmersive()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        refreshPermissions()
         seedFromDebugIntent()
         BotService.start(this)
         setContent {
@@ -144,6 +166,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val mouth by container.mouth.openness.collectAsState()
+        val hermesLine = debug.state.collectAsStateWithLifecycle().value.snapshot?.let { if (it.hermesHealthy) "Hermes online" else "Hermes unreachable" }.orEmpty()
         val liveScreen = screens[UiSurface.Full] ?: screens[UiSurface.Overlay] ?: screens[UiSurface.Desk]
         BackHandler(enabled = section != null) { section = null }
 
@@ -152,7 +175,7 @@ class MainActivity : ComponentActivity() {
             drawerContent = {
                 ModalDrawerSheet {
                   Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    Text("Deskbot", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
+                    Text("Deskbot", Modifier.padding(20.dp).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
                     Section.entries.forEach { s -> NavigationDrawerItem(label = { Text(s.label) }, selected = false, onClick = { section = s; scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp)) }
                     NavigationDrawerItem(label = { Text(if (wakeOn) "Stop listening" else "Always listen") }, selected = false, onClick = { container.wake.toggle(); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                     Text("Swipe left or press back to hide", Modifier.padding(20.dp), style = MaterialTheme.typography.bodySmall)
@@ -161,6 +184,8 @@ class MainActivity : ComponentActivity() {
             },
         ) {
             Box(Modifier.fillMaxSize().background(background)) {
+                // Screen readers: announces mood / bot state / Hermes connection changes without drawing anything.
+                Box(Modifier.size(1.dp).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = "Deskbot is ${bot.name.lowercase()}, mood ${face.mood.name.lowercase()}. $hermesLine".trim() })
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
                 FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
@@ -177,7 +202,7 @@ class MainActivity : ComponentActivity() {
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {
                             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))) {
                                 Column {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = { container.a2ui.clear() }) { Text("Hide") } }
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = { container.a2ui.clear() }, Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Hide this card" }) { Text("Hide") } }
                                     A2uiHost(liveScreen.root, uiValues, container.a2ui::setValue, { act -> scope.launch { container.handleUiAction(act) } }, container.statusProvider)
                                 }
                             }
@@ -187,7 +212,7 @@ class MainActivity : ComponentActivity() {
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(onClick = { section = null }) { Text("✕  Close") }; Text(s.label, style = MaterialTheme.typography.titleMedium)
+                                TextButton(onClick = { section = null }, Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Close ${s.label}" }) { Text("✕  Close") }; Text(s.label, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
                             }
                             Box(Modifier.weight(1f)) {
                                 when (s) {
@@ -195,12 +220,13 @@ class MainActivity : ComponentActivity() {
                                     Section.Voice -> VoiceScreen(voiceState, voice::talk, voice::cancel, Modifier, wakeOn,
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
-                                        DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode) }
+                                        DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode,
+                                            onCopyCrash = { text -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Deskbot crash report", text)) }, onClearCrash = debug::clearCrash) }
                                     Section.Avatar -> { val lib by library.state.collectAsStateWithLifecycle()
-                                        LaunchedEffect(lib.message) { if (lib.message != null) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
+                                        LaunchedEffect(lib.message) { if (lib.message != null && !lib.messageIsError) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
                                         com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, onUse = { slot -> library.use(slot); section = null }, onRetry = library::retry, onRemove = library::removeAvatar, onUpload = { pickVrm.launch(arrayOf("*/*")) },
-                                            onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail) }
-                                    Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save) }
+                                            onLoad = library::load, onSelect = library::select, onQuery = library::onQuery, onInstall = library::install, thumbnail = library::thumbnail, onDismissMessage = library::consumeMessage) }
+                                    Section.Settings -> { val st by settings.state.collectAsStateWithLifecycle(); SettingsScreen(st, settings::onBaseUrl, settings::onApiKey, settings::save, onDisplayQuality = settings::onDisplayQuality, onShowIntro = { section = null; onboarding.replay() }) }
                                 }
                             }
                         }
@@ -208,6 +234,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        val intro by onboarding.state.collectAsStateWithLifecycle()
+        if (intro.visible) OnboardingScreen(intro, onNext = onboarding::next, onBack = onboarding::back, onSkip = onboarding::skip, onRequestPermissions = ::requestMissingPermissions, onTestConnection = onboarding::testConnection)
     }
 
     /** Hide status and navigation bars; they reappear transiently on an edge swipe and hide again. */
@@ -224,6 +252,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshPermissions()
         container.pipRequest = { runCatching { enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(1, 1)).build()) }.getOrDefault(false) }
         val locked = container.showWhenLocked()
         setShowWhenLocked(locked); setTurnScreenOn(locked)

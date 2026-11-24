@@ -66,7 +66,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** The only place implementations are bound to ports. Capability wiring lives in [CapabilityCatalog]. */
-class AppContainer(private val app: Application) {
+class AppContainer(private val app: Application, val crashLog: com.rishitgoklani.hermes_front_mobile.domain.diagnostics.CrashLog) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings: SettingsRepository = SettingsStore(app)
 
@@ -269,8 +269,9 @@ class AppContainer(private val app: Application) {
 
     fun voiceViewModel(owner: ViewModelStoreOwner): VoiceViewModel = vm(owner) { VoiceViewModel(runVoiceTurn, face::apply) }
     fun chatViewModel(owner: ViewModelStoreOwner): ChatViewModel = vm(owner) { ChatViewModel(hermes, face::apply) }
-    fun settingsViewModel(owner: ViewModelStoreOwner): SettingsViewModel = vm(owner) { SettingsViewModel(settings) }
-    fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource) }
+    fun settingsViewModel(owner: ViewModelStoreOwner): SettingsViewModel = vm(owner) { SettingsViewModel(settings, com.rishitgoklani.hermes_front_mobile.ui.settings.AboutInfo(BuildConfig.VERSION_NAME, BuildConfig.BUILD_TYPE)) }
+    fun onboardingViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingViewModel(settings, debugSource) }
+    fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource, crashLog) }
     fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller, avatarLibrary, avatarSlot, selectAvatar, removeAvatar) }
     fun avatarCarouselViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel = vm(owner) {
         val am = app.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -285,5 +286,17 @@ class AppContainer(private val app: Application) {
 
 class DeskbotApp : Application() {
     lateinit var container: AppContainer
-    override fun onCreate() { super.onCreate(); container = AppContainer(this); container.startBridge(); container.restorePersona(); container.startSensing() }
+    /** Created before anything else so even a crash while the container is built is recorded. */
+    val crashLog by lazy { com.rishitgoklani.hermes_front_mobile.domain.diagnostics.CrashLog(com.rishitgoklani.hermes_front_mobile.data.FileCrashStore(File(filesDir, "last_crash.txt"))) }
+
+    /** Records the crash (time, thread, stack, version; credentials redacted) to filesDir, then lets the previous handler finish the job. */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            crashLog.record(thread.name, error, "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})", System.currentTimeMillis())
+            previous?.uncaughtException(thread, error)
+        }
+    }
+
+    override fun onCreate() { super.onCreate(); installCrashHandler(); container = AppContainer(this, crashLog); container.startBridge(); container.restorePersona(); container.startSensing() }
 }

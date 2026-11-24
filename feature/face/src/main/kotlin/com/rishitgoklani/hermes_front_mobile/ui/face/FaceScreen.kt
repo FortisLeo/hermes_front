@@ -23,6 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import com.rishitgoklani.hermes_front_mobile.domain.BotState
 import com.rishitgoklani.hermes_front_mobile.domain.behavior.QuickAction
 import com.rishitgoklani.hermes_front_mobile.domain.face.FaceState
@@ -44,18 +49,30 @@ fun FaceScreen(
         if (faceContent != null) Box(Modifier.fillMaxSize()) {
             faceContent()
             // Transparent layer on top: a WebView would swallow the touches, so taps and long-presses are caught here.
-            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }, onLongPress = { panel = !panel }) })
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }, onLongPress = { panel = !panel }) }.faceSemantics(face, onTap) { panel = !panel })
         }
-        else FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor)
+        else Box(Modifier.fillMaxSize().faceSemantics(face, onTap) { panel = !panel }) { FaceView(bot, face, mouth = mouth, onTap = onTap, onLongPress = { panel = !panel }, backgroundColor = backgroundColor) }
         overlay()
       }
         if (panel) {
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    quickActions.forEach { a -> Button(onClick = { onAction(a); panel = false }) { Text(a.label) } }
+                    quickActions.forEach { a -> Button(onClick = { onAction(a); panel = false }, Modifier.heightIn(min = 48.dp)) { Text(a.label) } }
                 }
-                OutlinedButton(onClick = { panel = false }) { Text("Close") }
+                OutlinedButton(onClick = { panel = false }, Modifier.heightIn(min = 48.dp)) { Text("Close quick actions") }
             }
         }
     }
+}
+
+/** Screen-reader view of the face: what it is feeling, and the two gestures as named actions. */
+internal fun Modifier.faceSemantics(face: FaceState, onTap: () -> Unit, onTogglePanel: () -> Unit): Modifier = this.semantics {
+    contentDescription = FaceDescription.of(face)
+    onClick(label = "Interact with the face") { onTap(); true }
+    onLongClick(label = "Show quick actions") { onTogglePanel(); true }
+}
+
+/** Pure text for [faceSemantics], so it can be tested without Compose. */
+object FaceDescription {
+    fun of(face: FaceState): String = "Deskbot face, mood ${face.mood.name.lowercase()}" + (face.reaction?.let { ", reacting ${it.name.lowercase()}" } ?: "")
 }

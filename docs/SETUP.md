@@ -60,6 +60,15 @@ For start-at-boot, install the Termux:Boot app, open it once, and place `scripts
 - Ask Hermes to do something: "show my battery on screen", "set a 5 minute timer", "wave hello".
 - Verify everything: `python3 scripts/verify_recipes.py` (read-only phone commands) and `python3 scripts/verify_hermes.py` (real agent tasks).
 
+## First launch, crash report and display settings
+
+- **Introduction.** The first time the app opens it shows three skippable steps: what Deskbot is, why it asks for the microphone, camera and notification permissions (only permissions already in the manifest; skipping is fine), and a Hermes *Test connection* button. It appears once. Open **Settings > Show intro again** to see it again.
+- **Last crash.** If the app crashes, the time, thread, app version and stack trace are saved to `last_crash.txt` in the app's private files (capped at 24 KB, last 3 crashes, anything that looks like a token or API key is replaced with `[redacted]`). Open **Debug > Last crash** to read it, **Copy crash report** to share it, or **Clear crash report**.
+- **Display quality.** **Settings > Display quality** (Auto, Low, High) is stored with the other settings and read by the avatar renderer. Low saves battery and memory.
+- **About.** **Settings > About** shows the app version and build type.
+- **Avatars screen.** Empty library shows Upload and Browse catalog buttons; an import that fails shows its reason in a bar that stays until dismissed; an avatar the app died while loading is marked and offers Retry and Remove.
+- **Accessibility.** Buttons are at least 48 dp tall, icons and images have descriptions, and TalkBack announces the face mood, bot state and Hermes online/unreachable changes. Text follows the system font size.
+
 ## 7. The 3D avatar (optional)
 
 Copy a permissively licensed `.vrm` to the phone and have Hermes call `avatar_import {path}` (only CC0, CC-BY, CC-BY-SA or VRM "everyone" licences are accepted), then `avatar_mode avatar`. `.vrma` animation clips import with `avatar_import_clip` and play with `avatar_clip`. See the README for how the agent poses the avatar.

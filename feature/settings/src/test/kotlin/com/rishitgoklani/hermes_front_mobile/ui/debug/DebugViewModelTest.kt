@@ -24,6 +24,15 @@ class DebugViewModelTest {
         val vm = DebugViewModel(DebugSource { DebugSnapshot(true, "0.23", 70, listOf("a")) })
         assertEquals(70, vm.state.value.snapshot!!.bridgeTools); assertNull(vm.state.value.error)
     }
+    @Test fun showsLastCrashAndClearsIt() {
+        val store = com.rishitgoklani.hermes_front_mobile.testing.FakeCrashStore()
+        val log = com.rishitgoklani.hermes_front_mobile.domain.diagnostics.CrashLog(store)
+        log.record("main", RuntimeException("kaboom"), "1.0", 1L)
+        val vm = DebugViewModel(DebugSource { DebugSnapshot(true, "v", 1, emptyList()) }, log)
+        assertTrue(vm.state.value.lastCrash!!.contains("kaboom"))
+        vm.clearCrash(); assertNull(vm.state.value.lastCrash); assertNull(store.text)
+    }
+    @Test fun noCrashMeansNullLastCrash() { assertNull(DebugViewModel(DebugSource { DebugSnapshot(true, "v", 1, emptyList()) }).state.value.lastCrash) }
     @Test fun failureShowsError() { val vm = DebugViewModel(DebugSource { error("boom") }); assertEquals("boom", vm.state.value.error); assertNull(vm.state.value.snapshot) }
     @Test fun refreshReloads() {
         var n = 0; val vm = DebugViewModel(DebugSource { DebugSnapshot(true, "v", ++n, emptyList()) }); vm.refresh()
