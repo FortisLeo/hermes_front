@@ -89,6 +89,10 @@ class CatalogDeps(
     val avatarInstaller: com.rishitgoklani.hermes_front_mobile.domain.avatar.ModelInstaller? = null,
     val avatarLibraryTool: com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability? = null,
     val video: com.rishitgoklani.hermes_front_mobile.domain.vision.VideoRecorderPort? = null,
+    val notificationHistory: NotificationHistory = NotificationHistory(),
+    val notificationSource: com.rishitgoklani.hermes_front_mobile.domain.notifications.NotificationSource? = null,
+    val poster: com.rishitgoklani.hermes_front_mobile.domain.notifications.NotificationPoster? = null,
+    val extra: List<com.rishitgoklani.hermes_front_mobile.domain.bridge.Capability> = emptyList(),
 )
 
 /** Vision and recording tools (OCR, tables, codes, documents, objects, time-lapse, video). Every camera path takes facing=front|back. */
@@ -114,9 +118,9 @@ object CapabilityCatalog {
     fun build(d: CatalogDeps): CapabilityRegistry {
         val app = d.app
         val ui = AccessibilityUiAutomation(app)
-        val history = NotificationHistory()
-        val notifications = ListenerNotificationSource(app, history)
-        val poster = AndroidNotificationPoster(app, R.mipmap.ic_launcher)
+        val history = d.notificationHistory
+        val notifications = d.notificationSource ?: ListenerNotificationSource(app, history)
+        val poster = d.poster ?: AndroidNotificationPoster(app, R.mipmap.ic_launcher)
         val overlay = OverlayManager(app)
         val timers = TimerScheduler { delayMs, action -> val job = d.scope.launch { delay(delayMs); action() }; ({ job.cancel() }) }
         val sandbox = FileSandbox(listOfNotNull(app.filesDir, app.cacheDir, android.os.Environment.getExternalStorageDirectory(), app.getExternalFilesDir(null)))
@@ -167,6 +171,7 @@ object CapabilityCatalog {
             addAll(com.rishitgoklani.hermes_front_mobile.domain.macro.macroCapabilities(d.macros, d.runCapability))
             add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.lockDisplayCapability(d.lockDisplay.first, d.lockDisplay.second, d.lockDisplay.third))
             add(com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.visualWatchCapability(d.visualWatcher)); addAll(visionCapabilities(d, ui, deskbotDir)); add(com.rishitgoklani.hermes_front_mobile.data.capabilities.soundWatchCapability(d.soundWatcher))
+            addAll(d.extra)
         }
         return CapabilityRegistry(raw.map { it.recorded(d.macros) })
     }

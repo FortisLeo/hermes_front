@@ -7,8 +7,8 @@ import android.content.Context
 import com.rishitgoklani.hermes_front_mobile.domain.notifications.NotificationPoster
 import java.util.concurrent.atomic.AtomicInteger
 
-class AndroidNotificationPoster(private val context: Context, private val iconRes: Int) : NotificationPoster {
-    private val ids = AtomicInteger(1000)
+class AndroidNotificationPoster(private val context: Context, private val iconRes: Int, firstId: Int = 1000) : NotificationPoster {
+    private val ids = AtomicInteger(firstId)
     private val manager get() = context.getSystemService(NotificationManager::class.java)
 
     override fun post(title: String, text: String, actions: List<String>): Int {
