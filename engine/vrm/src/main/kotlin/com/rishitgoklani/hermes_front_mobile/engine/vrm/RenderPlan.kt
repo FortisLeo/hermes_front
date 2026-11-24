@@ -31,7 +31,7 @@ class Framing(val eyeX: Float, val eyeY: Float, val eyeZ: Float, val targetX: Fl
             val c = FloatArray(3); val lo = asset.boundsMin; val hi = asset.boundsMax
             Mat4.transformPoint(modelMatrix, 0, (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2, c)
             val height = max(hi[1] - lo[1], 0.1f)
-            val dist = (height / 2) / tan(Math.toRadians(FOV_DEG / 2.0)).toFloat() * 1.08f
+            val dist = (height / 2) / tan(Math.toRadians(FOV_DEG / 2.0)).toFloat() * 1.16f
             return Framing(c[0], c[1], c[2] + dist, c[0], c[1], c[2], Math.toRadians(FOV_DEG.toDouble()).toFloat())
         }
     }

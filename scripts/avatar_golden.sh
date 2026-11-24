@@ -1,6 +1,6 @@
 #!/bin/sh
 # Golden-image check for the native VRM engine. Poses the avatar through the bridge, screenshots the phone and compares
-# against docs/golden/<name>/<pose>.png (SSIM via python3 + Pillow/numpy when available, byte size sanity otherwise).
+# against docs/golden/<name>/<pose>.png (PSNR via ImageMagick).
 #   scripts/avatar_golden.sh <library-id> <name> [--update]
 # --update writes new goldens instead of comparing. Run on a phone with the avatar slot reachable.
 set -eu
@@ -19,16 +19,9 @@ fail=0
 for p in rest arms mouth happy headturn; do
   if [ "$MODE" = "--update" ]; then cp "$TMP/$p.png" "$OUT/$p.png"; echo "golden $NAME/$p updated"; continue; fi
   [ -f "$OUT/$p.png" ] || { echo "FAIL $p: no golden (run with --update)"; fail=1; continue; }
-  python3 - "$TMP/$p.png" "$OUT/$p.png" "$p" <<'PY' || fail=1
-import sys
-try:
-    from PIL import Image; import numpy as np
-except ImportError:
-    print("SKIP", sys.argv[3], "(Pillow/numpy missing)"); sys.exit(0)
-a=np.asarray(Image.open(sys.argv[1]).convert("L"),dtype=float); b=np.asarray(Image.open(sys.argv[2]).convert("L"),dtype=float)
-if a.shape!=b.shape: print("FAIL",sys.argv[3],"size differs",a.shape,b.shape); sys.exit(1)
-mse=((a-b)**2).mean(); psnr=99 if mse==0 else 10*np.log10(255*255/mse)
-print(("ok  " if psnr>=28 else "FAIL"),sys.argv[3],"psnr=%.1f"%psnr); sys.exit(0 if psnr>=28 else 1)
-PY
+  # PSNR via ImageMagick (inf means identical); >= 28 dB passes.
+  psnr=$(magick compare -metric PSNR "$TMP/$p.png" "$OUT/$p.png" null: 2>&1 || true)
+  case "$psnr" in inf*) psnr=99;; esac
+  if awk -v v="$psnr" 'BEGIN{exit !(v+0>=28)}'; then echo "ok   $p psnr=$psnr"; else echo "FAIL $p psnr=$psnr"; fail=1; fi
 done
 exit $fail
