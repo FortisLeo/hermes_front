@@ -112,3 +112,10 @@ avatar_mode
 avatar_pose
 avatar_animate
 avatar_bones
+sms_read
+sms_send
+call_log
+contacts_delete
+calendar_delete_event
+dnd
+app_usage

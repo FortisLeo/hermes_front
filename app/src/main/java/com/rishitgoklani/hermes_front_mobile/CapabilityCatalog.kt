@@ -11,6 +11,7 @@ import com.rishitgoklani.hermes_front_mobile.data.capabilities.brightnessCapabil
 import com.rishitgoklani.hermes_front_mobile.data.capabilities.calendarCapabilities
 import com.rishitgoklani.hermes_front_mobile.data.capabilities.clipboardCapabilities
 import com.rishitgoklani.hermes_front_mobile.data.capabilities.contactCapabilities
+import com.rishitgoklani.hermes_front_mobile.data.capabilities.messagingCapabilities
 import com.rishitgoklani.hermes_front_mobile.data.capabilities.deviceInfoCapability
 import com.rishitgoklani.hermes_front_mobile.data.capabilities.hapticsCapability
 import com.rishitgoklani.hermes_front_mobile.data.capabilities.locationCapability
@@ -116,7 +117,7 @@ object CapabilityCatalog {
             })
             add(com.rishitgoklani.hermes_front_mobile.data.capabilities.drawOverlayCapability(app, com.rishitgoklani.hermes_front_mobile.data.capabilities.DrawOverlay(app)))
             add(com.rishitgoklani.hermes_front_mobile.data.capabilities.faceBubbleCapability(com.rishitgoklani.hermes_front_mobile.data.capabilities.FaceBubble(app, d.face, d.scope, android.content.Intent(app, MainActivity::class.java))))
-            addAll(calendarCapabilities(app)); addAll(contactCapabilities(app)); addAll(fileCapabilities(sandbox)); add(httpRequestCapability())
+            addAll(calendarCapabilities(app)); addAll(contactCapabilities(app)); addAll(messagingCapabilities(app)); addAll(fileCapabilities(sandbox)); add(httpRequestCapability())
             addAll(timerCapabilities(TimerBook(), timers) { name -> d.tts.enqueue("Your $name timer is done."); poster.post("Timer done", name) })
             addAll(notificationCapabilities(notifications, history, poster))
             addAll(faceCapabilities(d.face, d.personas, d.onPersona)); add(quickActionsCapability(d.quickActions, d.registry))
