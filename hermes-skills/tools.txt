@@ -123,3 +123,14 @@ system_report
 package_info
 device_logs
 radio
+notifications_rank
+notification_silence
+now_playing
+lock_screen_answer
+charge_limit
+health_check
+reminder_when
+routine_template_list
+routine_template_run
+routine_template_cancel
+focus_filter

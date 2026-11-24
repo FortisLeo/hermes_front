@@ -173,13 +173,20 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     private val _screenRequests = kotlinx.coroutines.flow.MutableSharedFlow<com.rishitgoklani.hermes_front_mobile.domain.a2ui.Surface>(extraBufferCapacity = 8)
     val screenRequests: kotlinx.coroutines.flow.SharedFlow<com.rishitgoklani.hermes_front_mobile.domain.a2ui.Surface> = _screenRequests
 
+    // Self-contained features (ranking, now playing, charge cap, health checks, reminders, routine templates) share one notification source/poster.
+    private val notificationHistory = com.rishitgoklani.hermes_front_mobile.domain.notifications.NotificationHistory()
+    private val notificationSource = com.rishitgoklani.hermes_front_mobile.data.notifications.ListenerNotificationSource(app, notificationHistory)
+    private val notificationPoster = com.rishitgoklani.hermes_front_mobile.data.notifications.AndroidNotificationPoster(app, R.mipmap.ic_launcher)
+    private val extras = ExtraFeatures(app, scope, tts, kill, { runCapability }, notificationSource, com.rishitgoklani.hermes_front_mobile.data.notifications.AndroidNotificationPoster(app, R.mipmap.ic_launcher, 5000), File(app.filesDir, "audit.log"))
+
     val capabilities: com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = CapabilityCatalog.build(CatalogDeps(
         app, tts, scope, audit, File(app.filesDir, "audit.log"), face, personas, quickActions, ::applyPersona, wake, modelStore::isReady, camera,
         AndroidFaceCounter(), kill, routines, ambient, selfChecks, a2ui,
-        { surface -> _screenRequests.tryEmit(surface); runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
+        { surface -> _screenRequests.tryEmit(surface); if (!(surface == com.rishitgoklani.hermes_front_mobile.domain.a2ui.Surface.Overlay && android.provider.Settings.canDrawOverlays(app))) runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }, places, { safeMode.value }, visualWatcher, soundWatcher,
         Triple({ prefs.getBoolean("show_locked", false) }, { v: Boolean -> prefs.edit().putBoolean("show_locked", v).apply() }, { runCatching { app.startActivity(android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }),
         macros, { runCapability }, { capabilitiesRef() }, onFaceSeen = { scope.launch { engine.onEvent(DeviceEvent.FaceSeen()) } }, avatar = avatar, pip = { pipRequest }, avatarCatalog = avatarCatalog, avatarInstaller = avatarInstaller,
-        avatarLibraryTool = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.avatarLibraryCapability(avatarLibrary, avatarSlot, selectAvatar, cycleAvatar, removeAvatar)))
+        avatarLibraryTool = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.avatarLibraryCapability(avatarLibrary, avatarSlot, selectAvatar, cycleAvatar, removeAvatar),
+        notificationHistory = notificationHistory, notificationSource = notificationSource, poster = notificationPoster, extra = extras.capabilities))
     private fun capabilitiesRef(): com.rishitgoklani.hermes_front_mobile.domain.bridge.CapabilityRegistry = capabilities
     val runCapability: RunCapability = RunCapability(capabilities)
     val engine = RoutineEngine(routines, runCapability, audit = audit)
@@ -192,6 +199,9 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
             else -> null
         }
     }
+
+    /** #414: the A2UI overlay surface as a real window above other apps; [overlayController].fallback tells the in-app UI to draw it itself when the window cannot be used. */
+    val overlayController = com.rishitgoklani.hermes_front_mobile.domain.overlay.A2uiOverlayController(a2ui, A2uiWindowOverlay(app, a2ui, statusProvider) { act -> scope.launch { handleUiAction(act) } }, scope).also { it.start() }
 
     private val placeTracker = com.rishitgoklani.hermes_front_mobile.domain.sense.PlaceTracker()
     private val greeter = com.rishitgoklani.hermes_front_mobile.domain.face.ArrivalGreeter(hour = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) })
@@ -230,10 +240,11 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     private var sensing = false
     fun startSensing() {
         if (safeMode.value || sensing) return; sensing = true
-        scope.launch { // geofence polling: only does work while places exist
-            while (true) { kotlinx.coroutines.delay(120_000); val ps = places.all(); if (ps.isEmpty() || kill.isActive()) continue
-                locationOnce(app)?.let { (lat, lon) -> placeTracker.update(lat, lon, ps).forEach { engine.onEvent(it) } } }
-        }
+        // Geofence polling: battery- and distance-aware interval, backs off when location fixes fail (see GeofencePoller).
+        val poller = com.rishitgoklani.hermes_front_mobile.domain.sense.GeofencePoller(places, { locationOnce(app) }, com.rishitgoklani.hermes_front_mobile.data.capabilities.AndroidBatteryStatusReader(app), placeTracker, { !kill.isActive() }) { engine.onEvent(it) }
+        scope.launch { kotlinx.coroutines.delay(30_000); while (true) kotlinx.coroutines.delay(poller.pollOnce()) }
+        engine.observe { e -> extras.onEvent(e) }
+        extras.start()
         engine.observe { e ->
             if (!kill.isActive()) greeter.onEvent(e)?.let { g -> face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Giggle); tts.enqueue(g) }
             val sig = when (e) {

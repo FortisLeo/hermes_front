@@ -168,7 +168,9 @@ class MainActivity : ComponentActivity() {
 
         val mouth by container.mouth.openness.collectAsState()
         val hermesLine = debug.state.collectAsStateWithLifecycle().value.snapshot?.let { if (it.hermesHealthy) "Hermes online" else "Hermes unreachable" }.orEmpty()
-        val liveScreen = screens[UiSurface.Full] ?: screens[UiSurface.Overlay] ?: screens[UiSurface.Desk]
+        // The overlay surface lives in its own window above other apps; it only draws here when that window cannot be used (no permission or the window failed).
+        val overlayFallback by container.overlayController.fallback.collectAsStateWithLifecycle()
+        val liveScreen = screens[UiSurface.Full] ?: (if (overlayFallback) screens[UiSurface.Overlay] else null) ?: screens[UiSurface.Desk]
         BackHandler(enabled = section != null) { section = null }
 
         ModalNavigationDrawer(
