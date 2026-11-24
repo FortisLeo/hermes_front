@@ -20,6 +20,8 @@ class LiveConversationLoop(
     private val config: VoiceLoopConfig = VoiceLoopConfig(),
     private val onWake: () -> Unit = {},
     private val onKill: (String) -> Unit = {},
+    /** Why a session failed (already free of the API key); the app logs it. */
+    private val onError: (Throwable) -> Unit = {},
 ) : VoiceLoop {
     private val _events = MutableSharedFlow<VoiceEvent>(extraBufferCapacity = 64)
     override val events: SharedFlow<VoiceEvent> = _events
@@ -40,6 +42,7 @@ class LiveConversationLoop(
             } catch (e: NoSuchElementException) {
                 delay(config.restartDelayMs)
             } catch (e: Exception) {
+                onError(e)
                 _events.emit(VoiceEvent.State(BotState.Error))
                 failures++
                 delay((config.restartDelayMs shl failures.coerceAtMost(6)).coerceAtMost(config.maxFailureBackoffMs))

@@ -152,7 +152,8 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
             frame = { facing -> camera.capture(facing, 140_000) }, audit = audit)
     }
     private val liveLoop = com.rishitgoklani.hermes_front_mobile.domain.voice.LiveConversationLoop(VoskKeywordSpotter(modelStore), { liveRun }, VoiceLoopConfig(),
-        onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") })
+        onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") },
+        onError = { android.util.Log.w("DeskbotLive", "session failed: ${it.message}") })
     val wake: WakeController = WakeController(
         com.rishitgoklani.hermes_front_mobile.domain.voice.SwitchingVoiceLoop(loop, liveLoop, { liveSettings.settings.first().ready }), scope, { prefs.edit().putBoolean("wake", it).apply() })
     // The backend is chosen when the loop starts, so switching it in Settings restarts a running loop.
