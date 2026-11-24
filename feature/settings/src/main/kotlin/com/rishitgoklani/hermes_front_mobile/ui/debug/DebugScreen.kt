@@ -12,21 +12,38 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiLogEntry
+import com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource
+import com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiStatus
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DebugScreen(
     state: DebugUiState, onRefresh: () -> Unit, modifier: Modifier = Modifier, killActive: Boolean = false, onResetKill: () -> Unit = {}, safeMode: Boolean = false, onExitSafeMode: () -> Unit = {},
     onCopyCrash: (String) -> Unit = {}, onClearCrash: () -> Unit = {},
+    onApiFilter: (ApiSource?) -> Unit = {}, onClearApiLog: () -> Unit = {}, onCopyApiLog: (String) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val s = state.snapshot
@@ -39,10 +56,64 @@ fun DebugScreen(
         if (killActive) { Text("KILL SWITCH ACTIVE: tools are blocked", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleMedium); Button(onClick = onResetKill, Modifier.minTarget()) { Text("Reset kill switch") } }
         Button(onClick = onRefresh, Modifier.minTarget()) { Text(if (state.loading) "Refreshing…" else "Refresh") }
         CrashSection(state.lastCrash, onCopyCrash, onClearCrash)
-        Text("Last tool calls", Modifier.semantics { heading() }, style = MaterialTheme.typography.labelLarge)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(s?.auditTail.orEmpty()) { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2) }
+        val time = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
+        val shown = state.shownApiCalls
+        var expanded by remember { mutableStateOf(emptySet<Long>()) }
+        var tab by remember { mutableStateOf(DebugTab.ApiCalls) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = tab == DebugTab.ApiCalls, onClick = { tab = DebugTab.ApiCalls }, label = { Text("API calls (${state.apiCalls.size})") }, modifier = Modifier.minTarget().semantics { role = Role.Tab })
+            FilterChip(selected = tab == DebugTab.ToolAudit, onClick = { tab = DebugTab.ToolAudit }, label = { Text("Tool audit") }, modifier = Modifier.minTarget().semantics { role = Role.Tab })
         }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (tab == DebugTab.ToolAudit) {
+                items(s?.auditTail.orEmpty()) { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2) }
+            } else {
+                item { ApiCallsHeader(state.apiFilter, state.apiCalls.size, shown.size, onApiFilter, onClearApiLog) { onCopyApiLog(ApiLogFormatText.of(shown) { time.format(Date(it)) }) } }
+                if (shown.isEmpty()) item { Text(if (state.apiCalls.isEmpty()) "No API calls yet." else "No calls from this source.", style = MaterialTheme.typography.bodySmall) }
+                items(shown, key = { it.id }) { e -> ApiCallRow(e, time.format(Date(e.startedAt)), e.id in expanded) { expanded = if (e.id in expanded) expanded - e.id else expanded + e.id } }
+            }
+        }
+    }
+}
+
+private enum class DebugTab { ApiCalls, ToolAudit }
+
+/** Plain-text export of the visible API calls (same text the Copy button puts on the clipboard). */
+internal object ApiLogFormatText {
+    fun of(entries: List<ApiLogEntry>, timeText: (Long) -> String): String = com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiLogFormat.all(entries, timeText)
+}
+
+/** "API calls": filter by source, copy what is shown, or clear. */
+@Composable
+internal fun ApiCallsHeader(filter: ApiSource?, total: Int, shownCount: Int, onFilter: (ApiSource?) -> Unit, onClear: () -> Unit, onCopy: () -> Unit) {
+    Column(Modifier.padding(top = 12.dp)) {
+        Text("API calls ($shownCount${if (shownCount != total) " of $total" else ""})", Modifier.semantics { heading() }, style = MaterialTheme.typography.labelLarge)
+        Text("Newest first. Kept in memory only; keys and tokens are masked and large payloads are collapsed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(selected = filter == null, onClick = { onFilter(null) }, label = { Text("All") }, modifier = Modifier.minTarget().semantics { role = Role.RadioButton })
+            ApiSource.entries.forEach { src -> FilterChip(selected = filter == src, onClick = { onFilter(src) }, label = { Text(src.label) }, modifier = Modifier.minTarget().semantics { role = Role.RadioButton }) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCopy, Modifier.minTarget()) { Text("Copy shown") }
+            OutlinedButton(onClick = onClear, Modifier.minTarget()) { Text("Clear log") }
+        }
+    }
+}
+
+/** One exchange: a summary line that opens to the full request and response. */
+@Composable
+internal fun ApiCallRow(e: ApiLogEntry, time: String, expanded: Boolean, onToggle: () -> Unit) {
+    val mark = when (e.status) { ApiStatus.Pending -> "…"; ApiStatus.Ok -> "OK"; ApiStatus.Error -> "FAIL" }
+    val color = if (e.status == ApiStatus.Error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    Column(Modifier.fillMaxWidth().clickable(onClickLabel = if (expanded) "Collapse" else "Expand", role = Role.Button, onClick = onToggle).minTarget().semantics { stateDescription = if (expanded) "expanded" else "collapsed" }) {
+        Text("$time  ${e.source.label}  $mark${e.durationMs?.let { "  $it ms" }.orEmpty()}", style = MaterialTheme.typography.labelSmall, color = color)
+        Text(e.label, style = MaterialTheme.typography.bodyMedium, color = color, maxLines = if (expanded) Int.MAX_VALUE else 1)
+        if (expanded) {
+            Text("Request", style = MaterialTheme.typography.labelSmall)
+            Text(e.request.ifBlank { "(empty)" }, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            Text("Response", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall)
+            Text(e.response.ifBlank { "(none yet)" }, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        } else if (e.response.isNotBlank()) Text(e.response.replace('\n', ' '), style = MaterialTheme.typography.bodySmall, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

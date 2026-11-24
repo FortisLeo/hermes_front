@@ -80,11 +80,15 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
         ServiceEnabler.enableAccessibility(app); ServiceEnabler.enableNotificationListener(app)
     }
 
-    val hermes: HermesGateway = HermesClient({ current }, { "Current local date and time on the user's phone: " + com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.LocalTime.describe(java.time.ZonedDateTime.now()) })
+    // Every API exchange (Hermes chat, Gemini Live, bridge calls) for the Debug screen; memory only, secrets masked.
+    @Volatile private var liveKey = ""
+    val apiLog: com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiLog = com.rishitgoklani.hermes_front_mobile.domain.diagnostics.InMemoryApiLog(secrets = { listOf(current.apiKey, liveKey, bridgeToken) })
+    val hermes: HermesGateway = HermesClient({ current }, { "Current local date and time on the user's phone: " + com.rishitgoklani.hermes_front_mobile.domain.bridge.capabilities.LocalTime.describe(java.time.ZonedDateTime.now()) }, log = apiLog)
     private val tts = AndroidSpeechSynthesizer(app)
     val speaker: SpeechSynthesizer get() = tts
     // Gemini Live backend (optional): one streaming session instead of STT -> Hermes -> TTS. Settings (incl. the API key) live in DataStore only.
     val liveSettings = com.rishitgoklani.hermes_front_mobile.data.live.LiveSettingsStore(app)
+    init { liveSettings.settings.onEach { liveKey = it.apiKey }.launchIn(scope) }
     private val liveOut = com.rishitgoklani.hermes_front_mobile.data.live.AudioTrackLiveOutput(scope)
     /** The mouth follows whichever voice is sounding: Android TTS word progress or the Live voice's loudness. */
     val mouth: com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource = object : com.rishitgoklani.hermes_front_mobile.domain.face.MouthSource {
@@ -145,11 +149,11 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
         val guard = { if (kill.isActive()) "Kill switch active: reset it on the phone" else null }
         val tools = com.rishitgoklani.hermes_front_mobile.domain.live.LiveToolBridge(capabilities, runCapability, com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.HOT_TOOLS, denied = guard)
         com.rishitgoklani.hermes_front_mobile.domain.live.RunLiveSession(
-            session = com.rishitgoklani.hermes_front_mobile.data.live.GeminiLiveClient(apiKey = { liveSettings.settings.first().apiKey }),
+            session = com.rishitgoklani.hermes_front_mobile.data.live.GeminiLiveClient(apiKey = { liveSettings.settings.first().apiKey }, log = apiLog),
             mic = com.rishitgoklani.hermes_front_mobile.data.live.AudioRecordLiveInput(), speaker = liveOut, tools = tools,
             settings = { liveSettings.settings.first() },
             prompt = { val p = activePersona; com.rishitgoklani.hermes_front_mobile.domain.live.LivePrompt.build(p?.name ?: "Deskbot", p?.tone.orEmpty(), p?.description.orEmpty()) },
-            frame = { facing -> camera.capture(facing, 140_000) }, audit = audit)
+            frame = { facing -> camera.capture(facing, 140_000) }, audit = audit, log = apiLog)
     }
     private val liveLoop = com.rishitgoklani.hermes_front_mobile.domain.voice.LiveConversationLoop(VoskKeywordSpotter(modelStore), { liveRun }, VoiceLoopConfig(),
         onWake = { face.react(com.rishitgoklani.hermes_front_mobile.domain.face.Reaction.Glance) }, onKill = { kill.trigger("voice: $it") },
@@ -325,7 +329,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
         }.start()
     }
 
-    private val bridge = BridgeServer(BridgeProtocol(capabilities, kill::isActive) { bridgeToken })
+    private val bridge = BridgeServer(BridgeProtocol(capabilities, kill::isActive, apiLog) { bridgeToken })
     fun startBridge() = runCatching { bridge.start() }.onFailure { android.util.Log.w("DeskbotBridge", "start failed: ${it.message}") }
     fun restorePersona() { scope.launch { applyPersona(personas.active()) } }
 
@@ -343,7 +347,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     fun liveSettingsViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.settings.LiveSettingsViewModel(liveSettings) }
     fun settingsViewModel(owner: ViewModelStoreOwner): SettingsViewModel = vm(owner) { SettingsViewModel(settings, com.rishitgoklani.hermes_front_mobile.ui.settings.AboutInfo(BuildConfig.VERSION_NAME, BuildConfig.BUILD_TYPE)) }
     fun onboardingViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.onboarding.OnboardingViewModel(settings, debugSource) }
-    fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource, crashLog) }
+    fun debugViewModel(owner: ViewModelStoreOwner): DebugViewModel = vm(owner) { DebugViewModel(debugSource, crashLog, apiLog) }
     fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller, avatarLibrary, avatarSlot, selectAvatar, removeAvatar) }
     fun avatarCarouselViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel = vm(owner) {
         val am = app.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager

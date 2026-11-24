@@ -39,3 +39,48 @@ class DebugViewModelTest {
         assertEquals(2, vm.state.value.snapshot!!.bridgeTools); assertTrue(!vm.state.value.loading)
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class DebugViewModelApiLogTest {
+    @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    @After fun tearDown() = Dispatchers.resetMain()
+    private val snap = DebugSource { DebugSnapshot(true, "v", 1, emptyList()) }
+    private fun log() = com.rishitgoklani.hermes_front_mobile.domain.diagnostics.InMemoryApiLog()
+    private fun com.rishitgoklani.hermes_front_mobile.domain.diagnostics.InMemoryApiLog.add(src: com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource, label: String) =
+        record(src, label, "req", "res", com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiStatus.Ok)
+
+    @Test fun showsEveryCallNewestFirstAndKeepsUpWithNewOnes() {
+        val l = log(); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes, "a")
+        val vm = DebugViewModel(snap, apiLog = l)
+        l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Bridge, "b")
+        assertEquals(listOf("b", "a"), vm.state.value.apiCalls.map { it.label })
+    }
+
+    @Test fun theSourceFilterNarrowsWhatIsShown() {
+        val l = log(); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes, "h"); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.GeminiLive, "g")
+        val vm = DebugViewModel(snap, apiLog = l)
+        vm.setApiFilter(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.GeminiLive)
+        assertEquals(listOf("g"), vm.state.value.shownApiCalls.map { it.label }); assertEquals(2, vm.state.value.apiCalls.size)
+        vm.setApiFilter(null); assertEquals(2, vm.state.value.shownApiCalls.size)
+    }
+
+    @Test fun clearingEmptiesTheLog() {
+        val l = log(); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes, "h"); val vm = DebugViewModel(snap, apiLog = l)
+        vm.clearApiLog(); assertTrue(vm.state.value.apiCalls.isEmpty())
+    }
+
+    @Test fun copyTextCoversOnlyTheFilteredCalls() {
+        val l = log(); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes, "h-call"); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Bridge, "b-call")
+        val vm = DebugViewModel(snap, apiLog = l); vm.setApiFilter(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Bridge)
+        val t = vm.apiLogText { "T" }
+        assertTrue("b-call" in t && "h-call" !in t)
+    }
+
+    @Test fun refreshingKeepsTheCallsAndTheFilter() {
+        val l = log(); l.add(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes, "h"); val vm = DebugViewModel(snap, apiLog = l)
+        vm.setApiFilter(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes); vm.refresh()
+        assertEquals(1, vm.state.value.apiCalls.size); assertEquals(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource.Hermes, vm.state.value.apiFilter)
+    }
+
+    @Test fun withoutALogTheSectionIsJustEmpty() = assertTrue(DebugViewModel(snap).state.value.apiCalls.isEmpty())
+}

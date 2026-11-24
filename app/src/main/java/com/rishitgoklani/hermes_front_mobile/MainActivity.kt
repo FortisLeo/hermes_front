@@ -233,7 +233,9 @@ class MainActivity : ComponentActivity() {
                                         if (wakeOn && !container.modelStore.isReady()) "Downloading speech model (40 MB) on first use…" else if (wakeOn) "Listening: $wakeBot" else "", onWakeToggle = { container.wake.toggle() })
                                     Section.Debug -> { val st by debug.state.collectAsStateWithLifecycle(); val killed by container.kill.active.collectAsStateWithLifecycle(); val safe by container.safeMode.collectAsStateWithLifecycle()
                                         DebugScreen(st, debug::refresh, Modifier, killed, container::resetKill, safe, container::exitSafeMode,
-                                            onCopyCrash = { text -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Deskbot crash report", text)) }, onClearCrash = debug::clearCrash) }
+                                            onCopyCrash = { text -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Deskbot crash report", text)) }, onClearCrash = debug::clearCrash,
+                                            onApiFilter = debug::setApiFilter, onClearApiLog = debug::clearApiLog,
+                                            onCopyApiLog = { text -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Deskbot API calls", text)) }) }
                                     Section.Avatar -> { val lib by library.state.collectAsStateWithLifecycle()
                                         LaunchedEffect(lib.message) { if (lib.message != null && !lib.messageIsError) { kotlinx.coroutines.delay(6000); library.consumeMessage() } }
                                         com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryScreen(lib, onUse = { slot -> library.use(slot); section = null }, onRetry = library::retry, onRemove = library::removeAvatar, onUpload = { pickVrm.launch(arrayOf("*/*")) },

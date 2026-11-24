@@ -5,6 +5,9 @@ import com.rishitgoklani.hermes_front_mobile.domain.CameraFacing
 import com.rishitgoklani.hermes_front_mobile.domain.TurnTiming
 import com.rishitgoklani.hermes_front_mobile.domain.VoiceEvent
 import com.rishitgoklani.hermes_front_mobile.domain.bridge.shell.AuditLog
+import com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiLog
+import com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiSource
+import com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiStatus
 import com.rishitgoklani.hermes_front_mobile.domain.face.EmotionHints
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -40,6 +43,8 @@ class RunLiveSession(
     private val audit: AuditLog? = null,
     private val maxReconnects: Int = 3,
     private val halfDuplexTailMs: Long = 350,
+    /** One entry per spoken exchange (what was heard, what was said) for the Debug screen. */
+    private val log: ApiLog? = null,
 ) {
     operator fun invoke(): Flow<VoiceEvent> = channelFlow {
         val s = settings()
@@ -83,6 +88,7 @@ class RunLiveSession(
             } finally {
                 pump.cancel()
                 withTimeoutOrNull(2_000) { while (state.ending && speaker.playing.value) delay(100) }
+                state.entry?.let { log?.finish(it, ApiStatus.Ok) }; state.entry = null
                 speaker.flush(); session.close()
             }
         }
@@ -110,6 +116,7 @@ class RunLiveSession(
         var handle: String? = null
         var reconnects = 0
         var turns = 0
+        var entry: Long? = null
         val pendingCalls = HashMap<String, Job>()
     }
 
@@ -118,6 +125,7 @@ class RunLiveSession(
             if (t.heard) return
             t.heard = true; t.turns++
             val text = t.input.toString().trim()
+            t.entry = log?.begin(ApiSource.GeminiLive, "turn", text.ifEmpty { "(no transcript)" })
             if (text.isNotEmpty()) { send(VoiceEvent.Heard(text)); EmotionHints.forUtterance(text)?.let { send(VoiceEvent.Expression(it)) } }
             send(VoiceEvent.State(BotState.Thinking))
         }
@@ -127,7 +135,7 @@ class RunLiveSession(
                 t.input.append(e.text); t.lastInputAt = clock(); t.activity = t.lastInputAt
                 send(VoiceEvent.Partial(t.input.toString().trim())); send(VoiceEvent.State(BotState.Listening))
             }
-            is LiveEvent.OutputText -> { ensureHeard(); t.activity = clock(); send(VoiceEvent.ReplyDelta(e.text)) }
+            is LiveEvent.OutputText -> { ensureHeard(); t.activity = clock(); t.entry?.let { log?.append(it, e.text) }; send(VoiceEvent.ReplyDelta(e.text)) }
             is LiveEvent.AudioOut -> {
                 ensureHeard(); t.activity = clock()
                 if (!t.speaking) {
@@ -141,9 +149,10 @@ class RunLiveSession(
             }
             is LiveEvent.ToolCall -> { ensureHeard(); send(VoiceEvent.State(BotState.Working)); e.calls.forEach { runCall(it, t, finished) } }
             is LiveEvent.ToolCancel -> e.ids.forEach { t.pendingCalls.remove(it)?.cancel() }
-            LiveEvent.Interrupted -> { speaker.flush(); t.speaking = false; t.heard = false; t.input.clear(); send(VoiceEvent.State(BotState.Listening)) }
+            LiveEvent.Interrupted -> { t.entry?.let { log?.append(it, " [interrupted]"); log?.finish(it, ApiStatus.Ok) }; t.entry = null; speaker.flush(); t.speaking = false; t.heard = false; t.input.clear(); send(VoiceEvent.State(BotState.Listening)) }
             LiveEvent.TurnComplete -> {
                 t.speaking = false; t.heard = false; t.input.clear(); t.activity = clock()
+                t.entry?.let { log?.finish(it, ApiStatus.Ok) }; t.entry = null
                 if (t.ending) finished.complete(Unit) else send(VoiceEvent.State(BotState.Listening))
             }
             is LiveEvent.Resumable -> t.handle = e.handle

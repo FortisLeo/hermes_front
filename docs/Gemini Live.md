@@ -24,3 +24,10 @@ wake word (Vosk) releases the mic -> `RunLiveSession` opens `GeminiLiveClient` -
 
 ## Facts to re-verify on the device
 The model id (`gemini-3.8-live`), the voices, and the exact setup fields come from Google's docs as read on 2026-11-25. If the server rejects the setup, the error text from the close frame is shown in the Error state and logged (`DeskbotLive`).
+
+## Debug > API calls
+Debug has an "API calls" tab listing every exchange, newest first, with source filters (Hermes, Gemini Live, Bridge), expandable request and response, Copy shown, and Clear log.
+- **Hermes:** each chat request body and the full streamed reply (images collapsed to a size marker).
+- **Gemini Live:** the session open (setup and confirmation), each tool call with its result, one entry per spoken turn (what was heard, what was said), camera frames, close and error reasons, and one running audio-volume entry per connection (audio is never logged per chunk).
+- **Bridge:** every call Hermes makes to the phone, with arguments and result.
+The log is in memory only (300 entries, 4,000 characters per field), so it is empty after the app restarts. Keys and tokens are masked (`ApiRedactor`) and long base64 payloads are collapsed.

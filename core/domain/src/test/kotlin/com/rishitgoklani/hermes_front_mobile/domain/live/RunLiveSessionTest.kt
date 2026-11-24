@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -166,5 +167,30 @@ class RunLiveSessionTest {
         val e = failsWith<IOException> { rig.run().toList() }
         assertEquals("API key not valid", e.message)
         assertTrue(rig.session.closes >= 1)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class RunLiveSessionLogTest {
+    @Test fun aSpokenExchangeBecomesOneTurnEntry() = runTest {
+        val log = com.rishitgoklani.hermes_front_mobile.domain.diagnostics.InMemoryApiLog(clock = { currentTime })
+        val session = FakeLiveSession(); val registry = CapabilityRegistry()
+        val run = RunLiveSession(session, FakeLiveAudioIn(), FakeLiveAudioOut(), LiveToolBridge(registry, RunCapability(registry), emptySet()), { LiveSettings(enabled = true, apiKey = "k") }, { "p" }, clock = { currentTime }, log = log)
+        val job = backgroundScope.launch { run().collect { } }; runCurrent()
+        session.emit(LiveEvent.InputText("what time is it"), LiveEvent.OutputText("It is "), LiveEvent.OutputText("noon.")); runCurrent()
+        assertEquals(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiStatus.Pending, log.entries.value.single().status)
+        session.emit(LiveEvent.TurnComplete); runCurrent()
+        val e = log.entries.value.single()
+        assertEquals("what time is it", e.request); assertEquals("It is noon.", e.response)
+        assertEquals(com.rishitgoklani.hermes_front_mobile.domain.diagnostics.ApiStatus.Ok, e.status); assertTrue(job.isActive)
+    }
+
+    @Test fun anInterruptedAnswerIsMarkedAsSuch() = runTest {
+        val log = com.rishitgoklani.hermes_front_mobile.domain.diagnostics.InMemoryApiLog(clock = { currentTime })
+        val session = FakeLiveSession(); val registry = CapabilityRegistry()
+        val run = RunLiveSession(session, FakeLiveAudioIn(), FakeLiveAudioOut(), LiveToolBridge(registry, RunCapability(registry), emptySet()), { LiveSettings(enabled = true, apiKey = "k") }, { "p" }, clock = { currentTime }, log = log)
+        backgroundScope.launch { run().collect { } }; runCurrent()
+        session.emit(LiveEvent.InputText("tell a story"), LiveEvent.OutputText("Once"), LiveEvent.Interrupted); runCurrent()
+        assertTrue(log.entries.value.single().response.endsWith("[interrupted]"))
     }
 }
