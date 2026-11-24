@@ -275,7 +275,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller, avatarLibrary, avatarSlot, selectAvatar, removeAvatar) }
     fun avatarCarouselViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel = vm(owner) {
         val am = app.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel(avatarLibrary, avatarSlot, avatarFiles, cycleAvatar, ::proveLater, avatarSnapshots, { android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.lowMemory }, log = { android.util.Log.d("DeskbotAvatar", it) })
+        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel(avatarLibrary, avatarSlot, avatarFiles, cycleAvatar, ::proveLater, avatarSnapshots, { android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.lowMemory }, log = { android.util.Log.d("DeskbotAvatar", it) }, nativeGl = com.rishitgoklani.hermes_front_mobile.data.avatar.DataStoreNativeGlSwitch.create(app))
     }
 
     private inline fun <reified T : ViewModel> vm(owner: ViewModelStoreOwner, crossinline create: () -> T): T =

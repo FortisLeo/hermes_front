@@ -209,6 +209,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     })
+                if (carouselUi.nativeDisabled) Surface(Modifier.align(Alignment.TopCenter).padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite }, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                    Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("The 3D avatar was turned off after a graphics error.", color = MaterialTheme.colorScheme.onErrorContainer)
+                        TextButton(onClick = carousel::retryNative, Modifier.heightIn(min = 48.dp)) { Text("Retry") }
+                    }
+                }
                 section?.let { s ->
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         Column(Modifier.fillMaxSize().padding(top = 8.dp)) {

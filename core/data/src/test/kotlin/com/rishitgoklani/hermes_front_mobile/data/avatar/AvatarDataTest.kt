@@ -71,3 +71,13 @@ class ActiveSlotStoreTest {
         assertEquals(AvatarSlot.Eyes, a.current()); a.set(AvatarSlot.Model("q")); assertEquals(AvatarSlot.Model("q"), a.current()); f.delete(); Unit
     }
 }
+
+class NativeGlSwitchTest {
+    @Test fun defaultsToEnabledAndPersistsAcrossInstances() = runBlocking {
+        val f = Files.createTempFile("glswitch", ".preferences_pb").toFile().also { it.delete() }
+        fun open() = DataStoreNativeGlSwitch(PreferenceDataStoreFactory.create(scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())) { f })
+        val a = open()
+        assertEquals(false, a.disabled()); a.setDisabled(true); assertEquals(true, a.disabled())
+        a.setDisabled(false); assertEquals(false, a.disabled()); f.delete(); Unit
+    }
+}
