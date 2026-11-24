@@ -16,7 +16,7 @@ metadata:
 Method ladder for every item: app tool or `deskbot_shell` (root) first, accessibility (`deskbot_ui_*`) only if the command is refused, screenshot+vision last. Always **verify** by reading state back (`deskbot_network_info`, `deskbot_settings_get`). Commands below vary by Android version (device is Android 16); if one fails, try the alternative listed, then record what worked in memory.
 
 ### 1 Toggle a radio
-`svc wifi enable|disable`; `svc data enable|disable`; `cmd bluetooth_manager enable|disable`; `svc nfc enable|disable`; `cmd connectivity airplane-mode enable|disable`; `cmd location set-location-enabled true|false`; hotspot: `cmd wifi start-softap <ssid> wpa2 <pass>` / `cmd wifi stop-softap`. Verify with `deskbot_network_info` (wifi_enabled, bluetooth_enabled) or `settings get global airplane_mode_on`.
+`deskbot_radio name=wifi|bluetooth|mobile_data|airplane state=get|on|off` does it in one call and returns the verified state. Others (shell): `svc nfc enable|disable`; `cmd location set-location-enabled true|false`; hotspot `cmd wifi start-softap <ssid> wpa2 <pass>` / `cmd wifi stop-softap`.
 
 ### 2 Join or forget a Wi-Fi network
 Join: `cmd wifi connect-network "<ssid>" wpa2 "<pass>"` (open: `open`; hidden: add `-h`). Forget: `cmd wifi forget-network <netId>` (list with `cmd wifi list-networks`). Captive portal: open the portal in the browser (`am start -a android.intent.action.VIEW -d http://neverssl.com`), then drive with `deskbot_ui_tree`/`deskbot_ui_click`. Verify: `deskbot_network_info` shows the SSID and `online:true`.

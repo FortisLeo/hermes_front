@@ -14,13 +14,13 @@ metadata:
 # System info, monitoring, logs and diagnostics
 
 ### 181 Device info report
-`deskbot_device_info`; kernel/build `uname -a; getprop ro.build.fingerprint`; root: `ksud --version; su -v` (KernelSU Next present). 
+`deskbot_system_report sections=["kernel"]` gives kernel and build fingerprint; `deskbot_device_info` gives model and Android version. Root: `ksud --version; su -v` (KernelSU Next present).
 
 ### 182 CPU, memory, and process monitor
-`top -b -n 1 -m 15`; memory `cat /proc/meminfo | head -5`, `dumpsys meminfo | head -30`; kill hog: `am force-stop <pkg>` (ask first unless it is the bot itself).
+One call: `deskbot_system_report sections=["cpu","memory"]` (top processes and free RAM/swap). Kill a hog: `am force-stop <pkg>` (ask first unless it is the bot itself).
 
 ### 183 Uptime and reboot reasons
-`uptime`; `getprop sys.boot.reason; getprop ro.boot.bootreason`; crash history `ls /data/system/dropbox | tail`, pstore `ls /sys/fs/pstore`.
+`deskbot_system_report sections=["uptime"]`. Reboot reasons (shell): `getprop sys.boot.reason; getprop ro.boot.bootreason`; crash history `ls /data/system/dropbox | tail`, pstore `ls /sys/fs/pstore`.
 
 ### 184 Sensor inventory and reads
 `deskbot_sensor_list`, `deskbot_sensor_read name=light|accelerometer|proximity|magnetometer|step_counter`. Full list: `dumpsys sensorservice | head -60`.
@@ -44,13 +44,13 @@ Hermes cron hourly: run #186, store in memory, alert via `deskbot_notification_p
 Save a snapshot file with: `getprop`, `settings list system/global/secure`, `pm list packages -f`, `dumpsys battery`, `df`, `ip addr`. Store as `/sdcard/deskbot-backup/env_<date>.txt`; diff two snapshots after a change.
 
 ### 191 Read logcat
-`logcat -d -t 200 *:W`; by tag `logcat -d -s DeskbotBridge:*`; by app `logcat -d --pid=$(pidof <pkg>)`; time `logcat -d -t "11-22 22:00:00.000"`.
+`deskbot_device_logs kind=recent|errors|crash lines=20`. For a package filter use shell `logcat -d --pid=$(pidof <pkg>)`.
 
 ### 192 Explain an error
 Fetch the stack/error lines (#191), search the web for the exact message if unknown (`web_search`), and give cause + fix in two sentences. Check Deskbot audit log first for tool-call failures.
 
 ### 193 Kernel messages
-`dmesg | tail -100` (root); last crash `cat /sys/fs/pstore/console-ramoops*`; `logcat -b kernel -d`.
+`deskbot_device_logs kind=kernel lines=30`.
 
 ### 194 Dump system services
 `dumpsys <service> | head -200` (activity, window, battery, wifi, connectivity, notification, package). List services with `dumpsys -l`. Always truncate output.

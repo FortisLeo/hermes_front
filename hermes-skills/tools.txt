@@ -119,3 +119,7 @@ contacts_delete
 calendar_delete_event
 dnd
 app_usage
+system_report
+package_info
+device_logs
+radio

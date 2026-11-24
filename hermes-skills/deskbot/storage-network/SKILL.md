@@ -37,7 +37,7 @@ USB OTG: `ls /storage`; mount via vold automatically; SMB/NFS in Termux (`pkg in
 Local HTTP server: `python -m http.server 8080 --directory /sdcard/share` (LAN only; stop when done); link `http://<ip>:8080` where ip from `deskbot_network_info`. Send to another device with `adb push`/`scp`.
 
 ### 170 Disk health and integrity
-`df -h /data /sdcard`; `sha256sum` verify; free-space alert when < 10%; `e2fsck` is unsafe on mounted partitions (don't).
+`deskbot_system_report sections=["storage"]` for free space; integrity (shell): `dumpsys diskstats | head`, `cat /proc/mounts | grep -E ' /data '`; `df -h /data /sdcard`; `sha256sum` verify; free-space alert when < 10%; `e2fsck` is unsafe on mounted partitions (don't).
 
 ### 171 Connectivity check
 `deskbot_network_info`; `ping -c 3 1.1.1.1`; DNS `nslookup example.com` (Termux dnsutils); `deskbot_http_request url=http://connectivitycheck.gstatic.com/generate_204` (204 = online, other = captive portal); speed test `curl -o /dev/null -w "%{speed_download}" <big-file-url>`.

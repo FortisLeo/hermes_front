@@ -25,7 +25,7 @@ Force-stop `am force-stop <pkg>`; soft `deskbot_app_stop`; freeze `pm disable-us
 APK: `pm install -r -g <path>` (split: `pm install-multiple -r -g a.apk b.apk`). URL: `deskbot_http_request` cannot save binaries; use Termux `curl -L -o /sdcard/x.apk <url>` then `pm install`. Play Store: open `market://details?id=<pkg>` and tap Install via `deskbot_ui_click`. Verify with `deskbot_app_info`.
 
 ### 84 Update, downgrade, or pin a version
-Versions: `deskbot_app_info` (version_code). Downgrade: `pm install -r -d <apk>`. Pin: `pm set-install-location`/disable auto-update in the store UI. Check store versions through web research (`web_search`).
+Status first: `deskbot_package_info package=<pkg>` (version, enabled, permissions granted, standby bucket). Update: install the new APK with `pm install -r`; downgrade `pm install -r -d`; pin by disabling updates in the store (`pm disable-user` is not a pin). Version code: `deskbot_app_info`. Check store versions through web research (`web_search`).
 
 ### 85 Uninstall or hide an app
 `pm uninstall <pkg>` (user apps); system apps for user 0: `pm uninstall --user 0 <pkg>` (reversible with `cmd package install-existing <pkg>`); hide: `pm hide <pkg>`. Confirm with the user before removing anything they use.
