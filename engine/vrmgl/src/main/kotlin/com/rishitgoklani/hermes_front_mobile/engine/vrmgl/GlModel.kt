@@ -78,6 +78,8 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
     }
 
     private fun upload(p: com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmPrimitive): Gpu {
+        // Unbind the previous primitive's VAO: element-array binds below would otherwise overwrite that VAO's index buffer.
+        GLES30.glBindVertexArray(0)
         val morph = p.morphBase != null; val copies = if (morph) 2 else 1
         val posBufs = IntArray(copies); GLES30.glGenBuffers(copies, posBufs, 0)
         val other = IntArray(2); GLES30.glGenBuffers(2, other, 0); val attr = other[0]; val ibo = other[1]
