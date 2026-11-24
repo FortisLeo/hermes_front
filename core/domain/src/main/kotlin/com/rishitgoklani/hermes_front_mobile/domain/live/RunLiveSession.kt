@@ -45,7 +45,12 @@ class RunLiveSession(
     private val halfDuplexTailMs: Long = 350,
     /** One entry per spoken exchange (what was heard, what was said) for the Debug screen. */
     private val log: ApiLog? = null,
-) {
+) : LiveActivity {
+    private val _active = kotlinx.coroutines.flow.MutableStateFlow(false)
+    override val active: kotlinx.coroutines.flow.StateFlow<Boolean> = _active
+    private val _micLevel = kotlinx.coroutines.flow.MutableStateFlow(0f)
+    override val micLevel: kotlinx.coroutines.flow.StateFlow<Float> = _micLevel
+
     operator fun invoke(): Flow<VoiceEvent> = channelFlow {
         val s = settings()
         require(s.ready) { "Gemini Live is not set up: add an API key in Settings" }
@@ -63,15 +68,17 @@ class RunLiveSession(
             }
             try {
                 session.open(config(null))
+                _active.value = true
                 send(VoiceEvent.State(BotState.Listening))
                 state.activity = clock()
                 val micJob = launch {
                     var silentUntil = 0L
                     mic.chunks().collect { chunk ->
                         if (s.halfDuplex) {
-                            if (speaker.playing.value) { silentUntil = clock() + halfDuplexTailMs; return@collect }
-                            if (clock() < silentUntil) return@collect
+                            if (speaker.playing.value) { silentUntil = clock() + halfDuplexTailMs; _micLevel.value = 0f; return@collect }
+                            if (clock() < silentUntil) { _micLevel.value = 0f; return@collect }
                         }
+                        _micLevel.value = PcmLevel.mouthOpenness(PcmLevel.rms(chunk), MIC_GAIN)
                         session.sendAudio(chunk)
                     }
                 }
@@ -89,6 +96,7 @@ class RunLiveSession(
                 pump.cancel()
                 withTimeoutOrNull(2_000) { while (state.ending && speaker.playing.value) delay(100) }
                 state.entry?.let { log?.finish(it, ApiStatus.Ok) }; state.entry = null
+                _active.value = false; _micLevel.value = 0f
                 speaker.flush(); session.close()
             }
         }
@@ -199,5 +207,7 @@ class RunLiveSession(
     companion object {
         const val END_TOOL = "end_conversation"
         const val LOOK_TOOL = "look"
+        /** Speech through the phone mic is quiet (RMS ~0.02..0.15), so scale it up to fill the wave. */
+        const val MIC_GAIN = 7f
     }
 }

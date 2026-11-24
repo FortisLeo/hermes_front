@@ -194,3 +194,35 @@ class RunLiveSessionLogTest {
         assertTrue(log.entries.value.single().response.endsWith("[interrupted]"))
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class RunLiveSessionActivityTest {
+    private fun pcm(level: Int) = ByteArray(640) { if (it % 2 == 0) (level and 0xff).toByte() else (level shr 8).toByte() }
+    private class Rig(scope: TestScope, halfDuplex: Boolean = false) {
+        val session = FakeLiveSession(); val mic = FakeLiveAudioIn(); val speaker = FakeLiveAudioOut()
+        private val registry = CapabilityRegistry()
+        val run = RunLiveSession(session, mic, speaker, LiveToolBridge(registry, RunCapability(registry), emptySet()), { LiveSettings(enabled = true, apiKey = "k", halfDuplex = halfDuplex) }, { "p" }, clock = { scope.testScheduler.currentTime })
+        lateinit var job: Job
+        fun start(scope: TestScope) { job = scope.backgroundScope.launch { run().collect { } }; scope.testScheduler.runCurrent() }
+    }
+
+    @Test fun activeOnlyWhileTheConversationRuns() = runTest {
+        val r = Rig(this); assertTrue(!r.run.active.value)
+        r.start(this); assertTrue(r.run.active.value)
+        r.session.emit(LiveEvent.Closed("bye", error = false)); runCurrent(); advanceTimeBy(3_000); runCurrent()
+        assertTrue(!r.run.active.value); assertEquals(0f, r.run.micLevel.value, 0f)
+    }
+
+    @Test fun micLevelFollowsHowLoudTheUserIs() = runTest {
+        val r = Rig(this).also { it.start(this) }
+        r.mic.mic.emit(pcm(0)); runCurrent(); assertEquals(0f, r.run.micLevel.value, 0f)
+        r.mic.mic.emit(pcm(6000)); runCurrent(); assertTrue(r.run.micLevel.value > 0.5f)
+    }
+
+    @Test fun micLevelReadsZeroWhileTheBotTalksInHalfDuplex() = runTest {
+        val r = Rig(this, halfDuplex = true).also { it.start(this) }
+        r.mic.mic.emit(pcm(6000)); runCurrent(); assertTrue(r.run.micLevel.value > 0.5f)
+        r.speaker.setPlaying(true); r.mic.mic.emit(pcm(6000)); runCurrent()
+        assertEquals(0f, r.run.micLevel.value, 0f)
+    }
+}
