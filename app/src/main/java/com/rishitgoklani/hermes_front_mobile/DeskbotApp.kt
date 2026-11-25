@@ -258,7 +258,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
                 } else if (!want && isModel) selectAvatar(com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Eyes)
             }
         }
-        scope.launch { face.state.collect { avatar.setMood(it.mood); avatar.look(it.lookX, it.lookY) } }
+        scope.launch { face.state.collect { avatar.setFace(it.mood, it.moodIntensity, it.reaction, it.reactionIntensity); avatar.look(it.lookX, it.lookY) } }
         scope.launch { tts.openness.collect { avatar.setMouth(it) } }
     }
     private var sensing = false

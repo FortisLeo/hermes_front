@@ -21,6 +21,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarState
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.DeviceTextureBudget
+import com.rishitgoklani.hermes_front_mobile.domain.face.Effect
 import com.rishitgoklani.hermes_front_mobile.engine.vrmgl.ModelSpec
 import com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality
 import com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel
@@ -36,6 +37,8 @@ import java.io.File
 fun AvatarView(
     state: AvatarState, clipsDir: File, libraryDir: File, active: ModelRequest?, staged: ModelRequest?, events: ViewerEvents,
     modifier: Modifier = Modifier, snapshots: AvatarSnapshots? = null, displayQuality: DisplayQuality = DisplayQuality.Auto,
+    /** On-face effects to show and what the bot is doing ("thinking", "listening", ...), on top of the mood and reaction in [state]. */
+    effects: Set<Effect> = emptySet(), activity: String = "",
 ) {
     val ev = rememberUpdatedState(events)
     var view by remember { mutableStateOf<VrmGlView?>(null) }
@@ -51,13 +54,14 @@ fun AvatarView(
                 override fun onNodes(names: List<String>) = ev.value.onNodes(names)
                 override fun onHead(x: Float, y: Float, size: Float) = ev.value.onHead(x, y, size)
                 override fun onFatal(message: String) = ev.value.onFatal(message)
+                override fun onFaceEffectsUnavailable(message: String) = ev.value.onFaceEffectsUnavailable(message)
             }
             v.onResume(); view = v
         }
     }, onRelease = { snapshots?.capture = null; it.release() })
 
     LaunchedEffect(active, staged, view) { view?.want(spec(active), spec(staged)) }
-    LaunchedEffect(state, view) { view?.setInput(EngineInputMapper.input(state)) }
+    LaunchedEffect(state, effects, activity, view) { view?.setInput(EngineInputMapper.input(state, effects, activity)) }
     DisposableEffect(view) {
         val w = view
         snapshots?.capture = { done -> if (w == null) done(null) else w.snapshot(256, done) }

@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
         val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
         val carousel = container.avatarCarouselViewModel(this)
         val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
+        val engineFaceEffects = remember { mutableStateOf(true) }   // false once the engine reports it cannot draw them
         val viewerEvents = remember(carousel) { object : com.rishitgoklani.hermes_front_mobile.ui.avatar.ViewerEvents {
             override fun onShown(key: String, ms: Long, wasStaged: Boolean) = carousel.onShown(key, ms, wasStaged)
             override fun onStaged(key: String, ms: Long) = carousel.onStaged(key, ms)
@@ -134,6 +135,7 @@ class MainActivity : ComponentActivity() {
             override fun onFatal(message: String) = carousel.onFatal(message)
             override fun onNodes(names: List<String>) = container.avatar.setNodes(names)
             override fun onHead(x: Float, y: Float, size: Float) { head.value = Triple(x, y, size) }
+            override fun onFaceEffectsUnavailable(message: String) { engineFaceEffects.value = false }
         } }
         val face by container.face.state.collectAsStateWithLifecycle()
         val chatState by chat.state.collectAsStateWithLifecycle(); val voiceState by voice.state.collectAsStateWithLifecycle()
@@ -192,15 +194,17 @@ class MainActivity : ComponentActivity() {
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
                 val settingsUi by settings.state.collectAsStateWithLifecycle()
                 val renderQuality = settingsUi.displayQuality
+                // Blush, tears, sweat and anger marks are drawn by the engine on the 3D face; the 2D overlay keeps hearts, sparkles, Zzz and the like.
+                val faceEffects = com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects
                 FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
                         // A new quality level rebuilds the GL view so the new switches (outlines, physics, texture format) take effect.
-                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality) }
+                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality, effects = faceEffects, activity = bot.name) }
                         // While the viewer is still loading the model (e.g. coming from the eyes) the eyes stay on screen, then fade out.
                         androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))) {
                             com.rishitgoklani.hermes_front_mobile.ui.face.FaceView(bot, face, Modifier.fillMaxSize(), mouth = mouth, backgroundColor = background)
                         }
-                        com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects, head.value.first, head.value.second, head.value.third)
+                        com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(if (engineFaceEffects.value) faceEffects - com.rishitgoklani.hermes_front_mobile.ui.avatar.EngineInputMapper.engineEffects else faceEffects, head.value.first, head.value.second, head.value.third)
                     } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
                     onSwipeNext = if (section == null && liveScreen == null && carouselUi.slotCount > 1) carousel::swipeNext else null,
                     overlay = {

@@ -12,6 +12,8 @@ interface ViewerEvents {
     fun onError(key: String, message: String) {}
     fun onNodes(names: List<String>) {}
     fun onHead(x: Float, y: Float, size: Float) {}
+    /** The engine could not draw blush, tears, sweat and anger marks on the 3D face; the host draws them in 2D instead. */
+    fun onFaceEffectsUnavailable(message: String) {}
     /** The native renderer failed for good (GL error); the host should fall back to the eyes. */
     fun onFatal(message: String) {}
 }

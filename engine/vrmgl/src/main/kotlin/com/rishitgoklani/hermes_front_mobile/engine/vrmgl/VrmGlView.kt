@@ -56,6 +56,8 @@ interface VrmEvents {
     fun onNodes(names: List<String>) {}
     /** Names, expressions, morph targets, look-at and licence of a model that finished parsing (see [VrmInspector]). */
     fun onInfo(key: String, info: VrmInfo) {}
+    /** The 3D blush/tears/sweat/anger effects could not be drawn (shader or GL error); the host should draw them in 2D instead. Sent once. */
+    fun onFaceEffectsUnavailable(message: String) {}
     fun onHead(x: Float, y: Float, size: Float) {}
     /** The renderer hit an unrecoverable GL error (shader compile, EGL). The host should fall back to the Eyes face. */
     fun onFatal(message: String) {}
@@ -197,6 +199,7 @@ class VrmGlView(
                 try {
                     val v = IntArray(1); GLES30.glGetIntegerv(GLES30.GL_MAX_VERTEX_UNIFORM_VECTORS, v, 0); uniformLimit = v[0]
                     GLES30.glClearColor(BG_R, BG_G, BG_B, 1f); GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+                    faceFx = null; faceFxBroken = false   // a new GL context starts without the old program
                     val gen = ++glGeneration; if (gen > 1) main.post { reloadAfterContextLoss() }
                 } catch (t: Throwable) { fatal("GL setup failed: ${t.message}", t) }
             }
@@ -367,10 +370,22 @@ class VrmGlView(
                 m.updateMorphs()
                 val camDist = Math.abs(f.eyeZ - f.targetZ); Mat4.perspective(f.fovY, width.toFloat() / height, maxOf(0.05f, camDist - 1.5f), camDist + 3f, proj); Mat4.lookAt(f.eyeX, f.eyeY, f.eyeZ, f.targetX, f.targetY, f.targetZ, viewM); Mat4.mul(proj, 0, viewM, 0, vp, 0)
                 m.draw(vp, light, poseChanged)
+                drawFaceEffects(m, now)
                 if (++headTick % 6 == 0) reportHead(m, f)
             }
             thumbRequest?.let { (size, cb) -> thumbRequest = null; cb2(size, cb) }
         } catch (t: Throwable) { fatal("GL draw failed: ${t.message}", t) }
+    }
+
+    private var faceFx: FaceFxRenderer? = null; private var faceFxBroken = false
+    /** Blush, tears, sweat and anger marks on the face. A failure here only turns the effects off; it never stops the avatar. */
+    private fun drawFaceEffects(m: GlModel, nowNanos: Long) {
+        if (faceFxBroken) return
+        try {
+            m.faceFx.update(m.driver.face)
+            val r = faceFx ?: FaceFxRenderer().also { faceFx = it }
+            r.draw(m.faceFx, vp, (nowNanos / 1_000_000L % 3_600_000L) / 1000f)
+        } catch (t: Throwable) { faceFxBroken = true; Log.e(TAG, "Face effects disabled: ${t.message}", t); runCatching { GLES30.glGetError() }; main.post { if (!released) events?.onFaceEffectsUnavailable(t.message ?: "face effects failed") } }
     }
 
     private val tmp = FloatArray(3)

@@ -6,6 +6,7 @@ import android.opengl.GLUtils
 import android.os.Trace
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.AlphaMode
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.DrawItem
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.FaceFxLayout
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.Pass
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.PoseDriver
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.RenderPlan
@@ -27,6 +28,8 @@ data class EngineConfig(val outlines: Boolean = true, val springs: Boolean = tru
  */
 internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sharedPrograms: ProgramCache? = null) {
     val rig = Rig(asset); val driver = PoseDriver(rig); val springs = SpringSimulation(rig)
+    /** Where blush, tears, sweat and the anger mark sit this frame; the view's [FaceFxRenderer] draws them. */
+    val faceFx = FaceFxLayout(rig)
     val plan: List<DrawItem> = RenderPlan.build(asset, config.outlines)
     val maxJoints = asset.skins.maxOfOrNull { it.joints.size } ?: 0
     private val ownsPrograms = sharedPrograms == null
