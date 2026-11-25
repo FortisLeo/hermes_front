@@ -39,16 +39,20 @@ fun AvatarView(
     modifier: Modifier = Modifier, snapshots: AvatarSnapshots? = null, displayQuality: DisplayQuality = DisplayQuality.Auto,
     /** On-face effects to show and what the bot is doing ("thinking", "listening", ...), on top of the mood and reaction in [state]. */
     effects: Set<Effect> = emptySet(), activity: String = "",
+    /** Model prepared at app start (taken by the view instead of loading again) and where to keep posters of what is shown. */
+    startup: AvatarStartup? = null, posters: AvatarPosters? = null,
 ) {
     val ev = rememberUpdatedState(events)
     var view by remember { mutableStateOf<VrmGlView?>(null) }
-    fun spec(r: ModelRequest?) = r?.let { ModelSpec(it.key, File(libraryDir, "${it.key}.vrm"), it.cap) }
+    var shownKey by remember { mutableStateOf<String?>(null) }
+    fun spec(r: ModelRequest?) = r?.let { startup?.spec(it.key, it.cap) ?: ModelSpec(it.key, File(libraryDir, "${it.key}.vrm"), it.cap) }
 
     AndroidView(modifier = modifier.fillMaxSize(), factory = { ctx ->
         VrmGlView(ctx, textureBudgetBytes = deviceTextureBudget(ctx)).also { v ->
-            v.clipsDir = File(clipsDir, "clips")   // clips live in <avatar dir>/clips (the web viewer served them under /model/clips/)
+            v.clipsDir = File(clipsDir, "clips")
+            v.preloader = startup?.preloader   // clips live in <avatar dir>/clips (the web viewer served them under /model/clips/)
             v.events = object : VrmEvents {
-                override fun onShown(key: String, ms: Long, wasStaged: Boolean) = ev.value.onShown(key, ms, wasStaged)
+                override fun onShown(key: String, ms: Long, wasStaged: Boolean) { shownKey = key; ev.value.onShown(key, ms, wasStaged) }
                 override fun onStaged(key: String, ms: Long) = ev.value.onStaged(key, ms)
                 override fun onError(key: String, message: String) = ev.value.onError(key, message)
                 override fun onNodes(names: List<String>) = ev.value.onNodes(names)
@@ -62,6 +66,12 @@ fun AvatarView(
 
     LaunchedEffect(active, staged, view) { view?.want(spec(active), spec(staged)) }
     LaunchedEffect(state, effects, activity, view) { view?.setInput(EngineInputMapper.input(state, effects, activity)) }
+    // A few seconds after an avatar appears (settled in its idle pose), keep a poster of it for the next app start.
+    LaunchedEffect(shownKey, view) {
+        val key = shownKey ?: return@LaunchedEffect; val v = view ?: return@LaunchedEffect; val store = posters ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(2500)
+        v.capturePoster(0.5f) { jpeg -> if (jpeg != null) Thread { store.save(key, jpeg) }.start() }
+    }
     DisposableEffect(view) {
         val w = view
         snapshots?.capture = { done -> if (w == null) done(null) else w.snapshot(256, done) }
@@ -89,7 +99,7 @@ fun AvatarView(
 }
 
 /** The texture memory the phone can spare for avatars: see [DeviceTextureBudget]. */
-private fun deviceTextureBudget(ctx: Context): Long {
+internal fun deviceTextureBudget(ctx: Context): Long {
     val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val info = ActivityManager.MemoryInfo(); am.getMemoryInfo(info)
     return DeviceTextureBudget.bytes(info.totalMem, am.isLowRamDevice)
 }

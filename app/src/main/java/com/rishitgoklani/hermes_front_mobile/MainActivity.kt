@@ -109,6 +109,11 @@ class MainActivity : ComponentActivity() {
         refreshPermissions()
         seedFromDebugIntent()
         BotService.start(this)
+        // Before any UI exists: decode the saved avatar's poster and start parsing/decoding its model, so the first frame can show
+        // the poster and the 3D view only has to upload when it is ready.
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { container.startupAvatar()?.let { p -> container.avatarStartup.start(p.id, p.textureCap); StartupTrace.mark("startupPreloadQueued") } }
+        }
         StartupTrace.mark("setContent")
         setContent {
             val theme by container.theme.collectAsStateWithLifecycle()
@@ -196,18 +201,19 @@ class MainActivity : ComponentActivity() {
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
                 val settingsUi by settings.state.collectAsStateWithLifecycle()
                 val renderQuality = settingsUi.displayQuality
+                val startupPoster by container.avatarStartup.poster.collectAsStateWithLifecycle()
                 androidx.compose.runtime.LaunchedEffect(carouselUi.loaded) { if (carouselUi.loaded) StartupTrace.mark("carouselLoaded") }
                 androidx.compose.runtime.LaunchedEffect(carouselUi.active != null) { if (carouselUi.active != null) StartupTrace.mark("avatarRequested") }
                 // Blush, tears, sweat and anger marks are drawn by the engine on the 3D face; the 2D overlay keeps hearts, sparkles, Zzz and the like.
                 val faceEffects = com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) })   // saved slot not read yet: draw nothing, so the default eyes never flash
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) { startupPoster?.let { (_, img) -> androidx.compose.foundation.Image(img, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds) } } })   // saved slot not read yet: draw nothing, so the default eyes never flash
                     else if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
                         // A new quality level rebuilds the GL view so the new switches (outlines, physics, texture format) take effect.
-                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality, effects = faceEffects, activity = bot.name) }
+                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality, effects = faceEffects, activity = bot.name, startup = container.avatarStartup, posters = container.avatarPosters) }
                         // While the viewer is still loading the model it stays behind a plain cover that fades away: the eyes must not flash first.
                         androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))) {
-                            Box(Modifier.fillMaxSize().background(background))
+                            Box(Modifier.fillMaxSize().background(background)) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarPoster(carouselUi.active?.key, container.avatarPosters, container.avatarStartup) }
                         }
                         com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(if (engineFaceEffects.value) faceEffects - com.rishitgoklani.hermes_front_mobile.ui.avatar.EngineInputMapper.engineEffects else faceEffects, head.value.first, head.value.second, head.value.third)
                     } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
