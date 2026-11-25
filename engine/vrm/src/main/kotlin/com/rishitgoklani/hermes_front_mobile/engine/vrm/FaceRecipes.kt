@@ -1,6 +1,6 @@
 package com.rishitgoklani.hermes_front_mobile.engine.vrm
 
-/** A repeating wobble: [amp] (radians for head motion, weight for mouth flutter) at [hz] cycles per second. */
+/** A repeating wobble: [amp] (radians for head motion, weight for mouth flutter) at [hz] cycles per second. Keep head motion under ~4 Hz or it reads as a buzz, not a nod. */
 class Osc(val amp: Float, val hz: Float)
 
 /**
@@ -52,9 +52,9 @@ object FaceRecipes {
 
     /** Keys are [DriverInput.reaction] values (the lowercase `Reaction` names). Blink, glance and lookAround are handled elsewhere. */
     val reactions: Map<String, FaceRecipe> = mapOf(
-        "cry" to r("sad" to 1f, "blink" to 0.3f, chinDown = 0.14f, lean = 0.04f, nod = Osc(0.02f, 6f)),
-        "laugh" to r("happy" to 1f, "aa" to 0.5f, chinDown = -0.1f, nod = Osc(0.03f, 7f), flutter = Osc(0.22f, 8f)),
-        "giggle" to r("happy" to 0.9f, "aa" to 0.15f, chinDown = 0.04f, tiltLeft = 0.1f, nod = Osc(0.02f, 9f), flutter = Osc(0.12f, 10f)),
+        "cry" to r("sad" to 1f, "blink" to 0.3f, chinDown = 0.14f, lean = 0.04f, nod = Osc(0.03f, 2.5f)),
+        "laugh" to r("happy" to 1f, "aa" to 0.5f, chinDown = -0.1f, nod = Osc(0.05f, 3.5f), flutter = Osc(0.22f, 6f)),
+        "giggle" to r("happy" to 0.9f, "aa" to 0.15f, chinDown = 0.04f, tiltLeft = 0.1f, nod = Osc(0.045f, 3f), flutter = Osc(0.12f, 5f)),
         "wink" to r("blinkLeft" to 1f, "happy" to 0.5f, tiltLeft = 0.06f),
         "nod" to r(nod = Osc(0.18f, 2.2f)),
         "shakeno" to r(shake = Osc(0.22f, 2.6f)),

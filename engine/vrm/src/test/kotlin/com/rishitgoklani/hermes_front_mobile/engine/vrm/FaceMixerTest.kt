@@ -109,4 +109,9 @@ class FaceMixerTest {
         for (n in listOf("Blush", "blush_L", "Fcl_ALL_Blush", "cheek_red", "照れ", "頬染め", "Flushed")) assertTrue(n, BlushNames.matches(n))
         for (n in listOf("cheekPuff", "cheekSquintLeft", "mouthSmile", "Fcl_ALL_Joy", "interested")) assertFalse(n, BlushNames.matches(n))
     }
+
+    @Test fun headMotionIsSlowEnoughToReadAsANodAndNotABuzz() {
+        // Fast wobbles (tremble for fear is the one deliberate exception) look like shaking at 30 fps.
+        for ((name, rec) in FaceRecipes.reactions + FaceRecipes.moods) for (o in listOfNotNull(rec.nod, rec.roll)) assertTrue("$name head wobble at ${o.hz} Hz", o.hz <= 4f)
+    }
 }
