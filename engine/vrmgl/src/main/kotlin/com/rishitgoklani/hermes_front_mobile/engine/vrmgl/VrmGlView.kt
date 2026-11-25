@@ -27,6 +27,8 @@ import com.rishitgoklani.hermes_front_mobile.engine.vrm.ModelSlots
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.SlotHost
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.TextureBudgeting
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.TrimAction
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmInfo
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmInspector
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmParser
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.gltf.Glb
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.math.Mat4
@@ -52,6 +54,8 @@ interface VrmEvents {
     fun onStaged(key: String, ms: Long) {}
     fun onError(key: String, message: String) {}
     fun onNodes(names: List<String>) {}
+    /** Names, expressions, morph targets, look-at and licence of a model that finished parsing (see [VrmInspector]). */
+    fun onInfo(key: String, info: VrmInfo) {}
     fun onHead(x: Float, y: Float, size: Float) {}
     /** The renderer hit an unrecoverable GL error (shader compile, EGL). The host should fall back to the Eyes face. */
     fun onFatal(message: String) {}
@@ -296,7 +300,7 @@ class VrmGlView(
             val r = runCatching {
                 op.check()
                 val glb = Glb.open(spec.file); val asset = VrmParser.parse(glb)
-                
+                runCatching { VrmInspector.inspect(glb) }.onSuccess { info -> Log.i(TAG, "model $key\n${info.summary()}"); main.post { if (!released) events?.onInfo(key, info) } }
                 val m = onGl(op) { GlModel(asset, config) }; model = m; onGl(op) { m.prewarm() }
                 m.driver.clipSource = clipSource
                 val res = Resident(m, glb, spec); residents.add(res)
