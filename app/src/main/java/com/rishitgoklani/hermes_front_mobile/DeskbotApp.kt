@@ -343,5 +343,10 @@ class DeskbotApp : Application() {
         }
     }
 
-    override fun onCreate() { super.onCreate(); installCrashHandler(); container = AppContainer(this, crashLog); container.startBridge(); container.restorePersona(); container.startSensing() }
+    override fun onCreate() {
+        super.onCreate(); StartupTrace.mark("appOnCreate"); installCrashHandler()
+        container = StartupTrace.span("container") { AppContainer(this, crashLog) }
+        StartupTrace.span("bridge") { container.startBridge() }; container.restorePersona(); StartupTrace.span("sensing") { container.startSensing() }
+        StartupTrace.mark("appReady")
+    }
 }

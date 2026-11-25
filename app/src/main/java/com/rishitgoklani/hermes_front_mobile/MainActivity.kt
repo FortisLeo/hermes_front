@@ -102,13 +102,14 @@ class MainActivity : ComponentActivity() {
     private fun requestMissingPermissions() { val missing = PermissionGroup.entries.filter { !isGranted(it) }.mapNotNull(::androidPermission); if (missing.isNotEmpty()) permissionsAsked.launch(missing.toTypedArray()) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(savedInstanceState); StartupTrace.mark("activityOnCreate")
         enableEdgeToEdge()
         enterImmersive()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         refreshPermissions()
         seedFromDebugIntent()
         BotService.start(this)
+        StartupTrace.mark("setContent")
         setContent {
             val theme by container.theme.collectAsStateWithLifecycle()
             val primary = runCatching { Color(android.graphics.Color.parseColor(theme.primaryHex)) }.getOrDefault(Color.Cyan)
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
         var section by remember { mutableStateOf<Section?>(Section.entries.firstOrNull { it.name.equals(intent?.getStringExtra("section"), true) }) }
         val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
         val carousel = container.avatarCarouselViewModel(this)
+        androidx.compose.runtime.LaunchedEffect(Unit) { StartupTrace.mark("firstComposition") }
         val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
         val engineFaceEffects = remember { mutableStateOf(true) }   // false once the engine reports it cannot draw them
         val viewerEvents = remember(carousel) { object : com.rishitgoklani.hermes_front_mobile.ui.avatar.ViewerEvents {
@@ -194,6 +196,8 @@ class MainActivity : ComponentActivity() {
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
                 val settingsUi by settings.state.collectAsStateWithLifecycle()
                 val renderQuality = settingsUi.displayQuality
+                androidx.compose.runtime.LaunchedEffect(carouselUi.loaded) { if (carouselUi.loaded) StartupTrace.mark("carouselLoaded") }
+                androidx.compose.runtime.LaunchedEffect(carouselUi.active != null) { if (carouselUi.active != null) StartupTrace.mark("avatarRequested") }
                 // Blush, tears, sweat and anger marks are drawn by the engine on the 3D face; the 2D overlay keeps hearts, sparkles, Zzz and the like.
                 val faceEffects = com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects
                 FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) })   // saved slot not read yet: draw nothing, so the default eyes never flash

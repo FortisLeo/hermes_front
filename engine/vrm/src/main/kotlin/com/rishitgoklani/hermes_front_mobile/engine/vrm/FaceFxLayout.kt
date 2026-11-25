@@ -60,7 +60,9 @@ class FaceFxLayout(private val rig: Rig) {
     var facing = 1f; private set
 
     /** How far in front of the eyes the skin below them is, in eye distances, measured once from the model's own vertices. */
-    private val skinForward: Float by lazy { if (hasEyes) measureSkinForward() else SKIN_FORWARD }
+    @Volatile private var measuredSkin = Float.NaN
+    /** The measured value once [prepare] ran, the default before; never computed on the render thread. */
+    private val skinForward: Float get() = measuredSkin.let { if (it.isNaN()) SKIN_FORWARD else it }
 
     /** Factor that turns the eye bones' spacing into the spacing of the drawn eyes: 1 unless the bones are implausibly close together. */
     private val spacingScale: Float by lazy {
@@ -74,6 +76,13 @@ class FaceFxLayout(private val rig: Rig) {
 
     private val q = FloatArray(4); private val qr = FloatArray(4); private val qd = FloatArray(4)
     private val pa = FloatArray(3); private val pb = FloatArray(3); private val tmp = FloatArray(3)
+
+    /**
+     * Measures the skin depth (a scan over the model's vertices). Call it on a background thread once the model is on screen: it must never
+     * run on the render thread (it stalled the first frame for most of a second on a 300k-vertex model), and nothing needs it before an
+     * effect shows. Until it has run, skin decals use [SKIN_FORWARD].
+     */
+    fun prepare() { if (measuredSkin.isNaN()) measuredSkin = if (hasEyes) measureSkinForward() else SKIN_FORWARD }
 
     /** Recomputes the head frame, then every decal's matrix and fade. Call after [Rig.update] / the spring step. */
     fun update(mixer: FaceMixer) {
@@ -149,10 +158,14 @@ class FaceFxLayout(private val rig: Rig) {
         val e = bones * spacingScale
         val cx = (at(eyeA, 0) + at(eyeB, 0)) * 0.5f; val cy = (at(eyeA, 1) + at(eyeB, 1)) * 0.5f; val cz = (at(eyeA, 2) + at(eyeB, 2)) * 0.5f * sign
         var best = Float.NEGATIVE_INFINITY; val out = FloatArray(3); val sides = floatArrayOf(-1f, 1f)
+        // Primitives of one mesh usually share a single vertex array (VRoid splits a mesh by material): scan each array once, bulk-read.
+        val seen = java.util.IdentityHashMap<java.nio.ByteBuffer, Boolean>(); var xyz = FloatArray(0)
         for (p in rig.asset.primitives) {
-            val buf = p.positions.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            if (p.skinned && seen.put(p.positions, true) != null) continue
+            val n = p.vertexCount * 3; if (xyz.size < n) xyz = FloatArray(n)
+            p.positions.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN).also { it.position(0) }.asFloatBuffer().get(xyz, 0, n)
             for (v in 0 until p.vertexCount) {
-                var x = buf.getFloat(v * 12); var y = buf.getFloat(v * 12 + 4); var z = buf.getFloat(v * 12 + 8)
+                var x = xyz[v * 3]; var y = xyz[v * 3 + 1]; var z = xyz[v * 3 + 2]
                 if (!p.skinned) { Mat4.transformPoint(rest, p.node * 16, x, y, z, out); x = out[0]; y = out[1]; z = out[2] }
                 for (side in sides) {
                     val ex = cx + side * 0.5f * e

@@ -68,6 +68,8 @@ class FaceFxLayoutTest {
         val skin = floatArrayOf(0.03f, 1.713f, 0.11f, -0.03f, 1.713f, 0.10f, 0f, 0f, 0f)
         val r = Rig(VrmParser.parse(Glb.parse(MiniVrm.build(vrm1 = true, arms = true, positions = skin))))
         val l = FaceFxLayout(r)
+        assertEquals("before prepare the default is used", FaceFxLayout.SKIN_FORWARD, l.skinForwardForTests, 0f)
+        l.prepare()
         assertEquals("0.5 measured + margin", 0.5f + FaceFxLayout.SKIN_MARGIN, l.skinForwardForTests, 0.03f)
         val m = FaceMixer(r); for (i in 0 until 120) m.update(1f / 30f, all); r.update(); l.update(m)
         assertTrue("blush floats just in front of that skin: z=${l.decal(FaceMixer.FX_BLUSH, 1f)!!.matrix[14]}", l.decal(FaceMixer.FX_BLUSH, 1f)!!.matrix[14] > 0.11f)
@@ -90,5 +92,13 @@ class FaceFxLayoutTest {
 
     @Test fun plausibleEyeBonesAreLeftAlone() {
         val r = rig(true); val (_, l) = settled(r); assertEquals(0.06f, l.eyeDistance, 1e-4f)
+    }
+
+    @Test fun updateNeverMeasuresByItselfSoTheRenderThreadNeverScansVertices() {
+        val skin = floatArrayOf(0.03f, 1.713f, 0.11f, -0.03f, 1.713f, 0.10f, 0f, 0f, 0f)
+        val r = Rig(VrmParser.parse(Glb.parse(MiniVrm.build(vrm1 = true, arms = true, positions = skin))))
+        val l = FaceFxLayout(r); val m = FaceMixer(r); for (i in 0 until 120) m.update(1f / 30f, all); r.update(); l.update(m)
+        assertEquals(FaceFxLayout.SKIN_FORWARD, l.skinForwardForTests, 0f)
+        l.prepare(); l.update(m); assertEquals(0.5f + FaceFxLayout.SKIN_MARGIN, l.skinForwardForTests, 0.03f)
     }
 }
