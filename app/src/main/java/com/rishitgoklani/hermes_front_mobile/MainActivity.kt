@@ -196,19 +196,20 @@ class MainActivity : ComponentActivity() {
                 val renderQuality = settingsUi.displayQuality
                 // Blush, tears, sweat and anger marks are drawn by the engine on the 3D face; the 2D overlay keeps hearts, sparkles, Zzz and the like.
                 val faceEffects = com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (carouselUi.active != null) ({
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) })   // saved slot not read yet: draw nothing, so the default eyes never flash
+                    else if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
                         // A new quality level rebuilds the GL view so the new switches (outlines, physics, texture format) take effect.
                         androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality, effects = faceEffects, activity = bot.name) }
-                        // While the viewer is still loading the model (e.g. coming from the eyes) the eyes stay on screen, then fade out.
-                        androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))) {
-                            com.rishitgoklani.hermes_front_mobile.ui.face.FaceView(bot, face, Modifier.fillMaxSize(), mouth = mouth, backgroundColor = background)
+                        // While the viewer is still loading the model it stays behind a plain cover that fades away: the eyes must not flash first.
+                        androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))) {
+                            Box(Modifier.fillMaxSize().background(background))
                         }
                         com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(if (engineFaceEffects.value) faceEffects - com.rishitgoklani.hermes_front_mobile.ui.avatar.EngineInputMapper.engineEffects else faceEffects, head.value.first, head.value.second, head.value.third)
                     } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
-                    onSwipeNext = if (section == null && liveScreen == null && carouselUi.slotCount > 1) carousel::swipeNext else null,
+                    onSwipeNext = if (section == null && liveScreen == null && carouselUi.slotCount > 1) (suspend { carousel.swipeNextAndAwait() }) else null,
                     overlay = {
-                        if (liveScreen == null) { if (!inPip.value) { if (carouselUi.slot is AvatarSlot.Model) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
+                        if (liveScreen == null) { if (!inPip.value && carouselUi.loaded) { if (carouselUi.slot is AvatarSlot.Model) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {
                             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))) {
                                 Column {

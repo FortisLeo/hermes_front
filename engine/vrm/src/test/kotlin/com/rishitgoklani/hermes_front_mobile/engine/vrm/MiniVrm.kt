@@ -21,9 +21,9 @@ object MiniVrm {
 
     /** [arms] adds leftUpperArm/leftHand/rightUpperArm/rightHand/leftEye/rightEye (nodes 7..12) in a T-pose, the character's left at +X for VRM 1.0 and -X for VRM 0.x.
      *  [expressions1] replaces the VRM 1.0 expression block; [v0Groups] replaces the VRM 0.x blend shape groups; [shade] gives the VRM 0.x _ShadeShift/_ShadeToony. */
-    fun build(vrm1: Boolean = false, withSprings: Boolean = true, arms: Boolean = false, expressions1: String? = null, v0Groups: String? = null, shade: Pair<Float, Float>? = null, targets: Int = 1, secondPrimitive: Boolean = false, meshExtras: String = ""): ByteArray {
+    fun build(vrm1: Boolean = false, withSprings: Boolean = true, arms: Boolean = false, expressions1: String? = null, v0Groups: String? = null, shade: Pair<Float, Float>? = null, targets: Int = 1, secondPrimitive: Boolean = false, meshExtras: String = "", positions: FloatArray? = null): ByteArray {
         val bin = Bin()
-        val pos = bin.add(f(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f), 3, 5126, "VEC3")
+        val pos = bin.add(f(*(positions ?: floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f))), 3, 5126, "VEC3")
         val nrm = bin.add(f(0f, 0f, 1f, 0f, 0f, 1f, 0f, 0f, 1f), 3, 5126, "VEC3")
         val uv = bin.add(f(0f, 0f, 1f, 0f, 0f, 1f), 3, 5126, "VEC2")
         val jts = bin.add(byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 3, 5121, "VEC4")

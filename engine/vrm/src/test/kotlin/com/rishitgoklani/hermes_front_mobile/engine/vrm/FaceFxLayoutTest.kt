@@ -62,4 +62,33 @@ class FaceFxLayoutTest {
         assertTrue(l.eyeDistance > 0f); assertTrue(l.decal(FaceMixer.FX_BLUSH, -1f)!!.weight > 0.9f)
         assertTrue(l.eyeViewerLeft[0] < l.eyeViewerRight[0])
     }
+
+    @Test fun skinDecalsSitInFrontOfTheSkinMeasuredFromTheModelsOwnVertices() {
+        // Eyes at x = +-0.03, y = 1.75, z = 0.08 (6 cm apart). Put skin below each eye 3 cm in front of the eye plane (half an eye distance).
+        val skin = floatArrayOf(0.03f, 1.713f, 0.11f, -0.03f, 1.713f, 0.10f, 0f, 0f, 0f)
+        val r = Rig(VrmParser.parse(Glb.parse(MiniVrm.build(vrm1 = true, arms = true, positions = skin))))
+        val l = FaceFxLayout(r)
+        assertEquals("0.5 measured + margin", 0.5f + FaceFxLayout.SKIN_MARGIN, l.skinForwardForTests, 0.03f)
+        val m = FaceMixer(r); for (i in 0 until 120) m.update(1f / 30f, all); r.update(); l.update(m)
+        assertTrue("blush floats just in front of that skin: z=${l.decal(FaceMixer.FX_BLUSH, 1f)!!.matrix[14]}", l.decal(FaceMixer.FX_BLUSH, 1f)!!.matrix[14] > 0.11f)
+        assertTrue("symbols stay clear of the skin", l.decal(FaceMixer.FX_ANGER, 1f)!!.matrix[14] > 0.11f + 0.06f * 0.4f)
+    }
+
+    @Test fun withoutVerticesNearTheCheeksTheDefaultOffsetIsUsed() {
+        val l = FaceFxLayout(rig(true)); assertEquals(FaceFxLayout.SKIN_FORWARD, l.skinForwardForTests, 0f)
+    }
+
+    @Test fun eyeBonesImplausiblyCloseTogetherAreReplacedByTheHeadsProportions() {
+        // Eye bones 6 cm apart, but the head is 40 cm tall (neck-top bone at y=1.7, model top at 2.1): 6 cm < 20% of 40 cm, so the drawn eyes are wider.
+        val tall = floatArrayOf(0f, 0f, 0f, 0f, 2.1f, 0f, 0.1f, 0f, 0f)
+        val r = Rig(VrmParser.parse(Glb.parse(MiniVrm.build(vrm1 = true, arms = true, positions = tall))))
+        val m = FaceMixer(r); val l = FaceFxLayout(r); for (i in 0 until 120) m.update(1f / 30f, all); r.update(); l.update(m)
+        assertEquals(FaceFxLayout.STYLISED_SPACING * 0.4f, l.eyeDistance, 1e-3f)
+        val left = l.decal(FaceMixer.FX_BLUSH, -1f)!!; val right = l.decal(FaceMixer.FX_BLUSH, 1f)!!
+        assertEquals("cheeks move out to the wider spacing", l.eyeDistance, right.matrix[12] - left.matrix[12], 2e-3f)
+    }
+
+    @Test fun plausibleEyeBonesAreLeftAlone() {
+        val r = rig(true); val (_, l) = settled(r); assertEquals(0.06f, l.eyeDistance, 1e-4f)
+    }
 }

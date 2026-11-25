@@ -13,7 +13,10 @@ import com.rishitgoklani.hermes_front_mobile.testing.FakeNativeGlSwitch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -99,5 +102,28 @@ class AvatarCarouselViewModelTest {
     @Test fun aSuccessfulShowResetsTheErrorCount() = runTest {
         val r = Rig(listOf(e("a", 1), e("b", 2), e("c", 3)), AvatarSlot.Model("c")); advanceUntilIdle()
         r.vm.onError("a", "x"); r.vm.onError("b", "x"); r.vm.onShown("c", 1, false); r.vm.onError("a", "x"); r.vm.onError("b", "x"); advanceUntilIdle(); assertTrue(!r.gl.value)
+    }
+
+    @Test fun nothingIsDrawnUntilTheSavedSlotAndTheNativeFlagAreRead() = runTest {
+        val r = Rig(listOf(e("a", 1)), AvatarSlot.Model("a"))
+        assertTrue("before anything ran the default Eyes must not be shown", !r.vm.ui.value.loaded)
+        advanceUntilIdle(); assertTrue(r.vm.ui.value.loaded); assertEquals(AvatarSlot.Model("a"), r.vm.ui.value.slot)
+    }
+
+    @Test fun swipeNextAndAwaitReturnsOnlyOnceTheNewAvatarIsOnScreen() = runTest {
+        val r = Rig(listOf(e("a", 1), e("b", 2)), AvatarSlot.Model("a")); advanceUntilIdle(); r.vm.onShown("a", 1, false); advanceUntilIdle()
+        val j = launch { r.vm.swipeNextAndAwait(10_000) }; runCurrent()
+        assertTrue("still waiting: b has not reported it is shown", j.isActive); assertEquals(AvatarSlot.Model("b"), r.vm.ui.value.slot)
+        r.vm.onShown("b", 1, true); advanceUntilIdle(); assertTrue(j.isCompleted)
+    }
+
+    @Test fun swipeNextAndAwaitDoesNotWaitWhenTheNextStopIsEyes() = runTest {
+        val r = Rig(listOf(e("a", 1)), AvatarSlot.Model("a")); advanceUntilIdle(); r.vm.onShown("a", 1, false); advanceUntilIdle()
+        val j = launch { r.vm.swipeNextAndAwait(10_000) }; advanceUntilIdle(); assertTrue(j.isCompleted); assertEquals(AvatarSlot.Eyes, r.vm.ui.value.slot)
+    }
+
+    @Test fun swipeNextAndAwaitGivesUpAfterTheTimeoutWhenTheModelNeverLoads() = runTest {
+        val r = Rig(listOf(e("a", 1), e("b", 2)), AvatarSlot.Model("a")); advanceUntilIdle(); r.vm.onShown("a", 1, false); advanceUntilIdle()
+        val j = launch { r.vm.swipeNextAndAwait(1_500) }; advanceTimeBy(1_000); assertTrue(j.isActive); advanceTimeBy(1_000); advanceUntilIdle(); assertTrue(j.isCompleted)
     }
 }

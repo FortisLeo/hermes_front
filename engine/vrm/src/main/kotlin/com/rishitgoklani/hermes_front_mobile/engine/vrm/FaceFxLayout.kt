@@ -23,11 +23,17 @@ class FaceFxLayout(private val rig: Rig) {
     }
 
     companion object {
-        /** How far in front of the eyeball centre a decal that must sit on the skin floats (eye distances). Tuned by eye; the skin is about this far out. */
+        /** Used when the skin cannot be measured: how far in front of the eyeball centre a skin decal floats (eye distances). */
         const val SKIN_FORWARD = 0.26f
-        /** Comic symbols (sweat, anger) float in front of hair so nothing hides them. */
+        /** A skin decal floats this much (eye distances) in front of the measured skin so the cheek's curve does not bury its edges. */
+        const val SKIN_MARGIN = 0.08f
+        /** Comic symbols (sweat, anger) float at least this far in front of the eyes, and always clear of the skin, so hair never hides them. */
         const val SYMBOL_FORWARD = 0.7f
         const val FALLBACK_EYE_DISTANCE = 0.039f   // of the model's height
+        /** Eye bones closer together than this fraction of the head's height are not where the drawn eyes are (stylised faces keep them near the nose bridge). */
+        const val MIN_BONE_SPACING = 0.2f
+        /** Eye spacing used instead, as a fraction of the head's height (bone at the neck top to the top of the model). */
+        const val STYLISED_SPACING = 0.33f
     }
 
     // Order matters: the renderer draws in this order. Cheeks and tears sit on the skin (depth tested), symbols float on top.
@@ -53,6 +59,19 @@ class FaceFxLayout(private val rig: Rig) {
     /** 0..1: how much the face points at the camera (+Z in draw space). Effects fade out as the head turns away. */
     var facing = 1f; private set
 
+    /** How far in front of the eyes the skin below them is, in eye distances, measured once from the model's own vertices. */
+    private val skinForward: Float by lazy { if (hasEyes) measureSkinForward() else SKIN_FORWARD }
+
+    /** Factor that turns the eye bones' spacing into the spacing of the drawn eyes: 1 unless the bones are implausibly close together. */
+    private val spacingScale: Float by lazy {
+        if (!hasEyes) return@lazy 1f
+        val rest = VrmParser.restWorldMatrices(rig.asset.nodes)
+        fun at(n: Int, k: Int) = rest[n * 16 + 12 + k]
+        val bones = sqrt((at(eyeA, 0) - at(eyeB, 0)).let { it * it } + (at(eyeA, 1) - at(eyeB, 1)).let { it * it } + (at(eyeA, 2) - at(eyeB, 2)).let { it * it })
+        val headHeight = rig.asset.boundsMax[1] - at(headNode, 1)
+        if (bones > 1e-4f && headHeight > 0.05f && bones < MIN_BONE_SPACING * headHeight) STYLISED_SPACING * headHeight / bones else 1f
+    }
+
     private val q = FloatArray(4); private val qr = FloatArray(4); private val qd = FloatArray(4)
     private val pa = FloatArray(3); private val pb = FloatArray(3); private val tmp = FloatArray(3)
 
@@ -67,7 +86,11 @@ class FaceFxLayout(private val rig: Rig) {
             rig.worldPosition(eyeA, tmp); Mat4.transformPoint(rig.modelMatrix, 0, tmp[0], tmp[1], tmp[2], pa)
             rig.worldPosition(eyeB, tmp); Mat4.transformPoint(rig.modelMatrix, 0, tmp[0], tmp[1], tmp[2], pb)
             val d = dist(pa, pb)
-            if (d in 0.02f..0.2f) { eyeDistance = d; place(pa, pb); return finish(mixer) }
+            if (d in 0.01f..0.2f) {
+                val scale = spacingScale; eyeDistance = d * scale; place(pa, pb)
+                if (scale != 1f) { for (k in 0..2) { val c = (pa[k] + pb[k]) * 0.5f; eyeViewerLeft[k] = c - right[k] * eyeDistance * 0.5f; eyeViewerRight[k] = c + right[k] * eyeDistance * 0.5f } }
+                return finish(mixer)
+            }
         }
         // No usable eye bones: eyes sit a fixed fraction of the model's height above the head bone, a bit forward.
         rig.worldPosition(headNode, tmp); Mat4.transformPoint(rig.modelMatrix, 0, tmp[0], tmp[1], tmp[2], pa)
@@ -85,16 +108,17 @@ class FaceFxLayout(private val rig: Rig) {
     private fun finish(mixer: FaceMixer) {
         val e = eyeDistance
         facing = smooth(0.1f, 0.55f, forward[2])
+        val surface = skinForward; val symbol = maxOf(SYMBOL_FORWARD, surface + 0.5f)
         for (d in decals) {
             d.weight = mixer.decalWeight(d.kind) * facing
             if (d.weight <= 0.003f) continue
             val m = d.matrix; val eye = if (d.side < 0f) eyeViewerLeft else eyeViewerRight
             val forwardBy: Float; val upBy: Float; val outBy: Float
             when (d.kind) {
-                FaceMixer.FX_BLUSH -> { upBy = -0.62f; outBy = 0f; forwardBy = SKIN_FORWARD }
-                FaceMixer.FX_TEARS -> { upBy = -0.9f; outBy = 0f; forwardBy = SKIN_FORWARD }     // quad centre, so the stream starts near the lower lid
-                FaceMixer.FX_SWEAT -> { upBy = 1.05f; outBy = 1.3f; forwardBy = SYMBOL_FORWARD }
-                else -> { upBy = 1.35f; outBy = 1.1f; forwardBy = SYMBOL_FORWARD }
+                FaceMixer.FX_BLUSH -> { upBy = -0.62f; outBy = 0f; forwardBy = surface }
+                FaceMixer.FX_TEARS -> { upBy = -0.9f; outBy = 0f; forwardBy = surface }     // quad centre, so the stream starts near the lower lid
+                FaceMixer.FX_SWEAT -> { upBy = 1.05f; outBy = 1.3f; forwardBy = symbol }
+                else -> { upBy = 1.35f; outBy = 1.1f; forwardBy = symbol }
             }
             // Symbols hang off the viewer's right temple, measured from the middle of the eyes; cheeks and tears from their own eye.
             val ox: Float; val oy: Float; val oz: Float
@@ -111,8 +135,46 @@ class FaceFxLayout(private val rig: Rig) {
         }
     }
 
+    /**
+     * Looks at the model's vertices in the rest pose around the spot below each eye and returns how far the frontmost one is in front of the eye
+     * (eye distances) plus [SKIN_MARGIN]. Eye bones sit inside the eyeball and every model puts the skin a different distance in front of them, so a
+     * fixed offset buries the decal inside the face on some models. Falls back to [SKIN_FORWARD] when no vertices are found.
+     */
+    private fun measureSkinForward(): Float {
+        val rest = VrmParser.restWorldMatrices(rig.asset.nodes)
+        fun at(node: Int, k: Int) = rest[node * 16 + 12 + k]
+        val bones = sqrt((at(eyeA, 0) - at(eyeB, 0)).let { it * it } + (at(eyeA, 1) - at(eyeB, 1)).let { it * it } + (at(eyeA, 2) - at(eyeB, 2)).let { it * it })
+        if (bones < 0.01f || bones > 0.2f) return SKIN_FORWARD
+        val sign = if (rig.asset.isVrm0) -1f else 1f
+        val e = bones * spacingScale
+        val cx = (at(eyeA, 0) + at(eyeB, 0)) * 0.5f; val cy = (at(eyeA, 1) + at(eyeB, 1)) * 0.5f; val cz = (at(eyeA, 2) + at(eyeB, 2)) * 0.5f * sign
+        var best = Float.NEGATIVE_INFINITY; val out = FloatArray(3); val sides = floatArrayOf(-1f, 1f)
+        for (p in rig.asset.primitives) {
+            val buf = p.positions.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            for (v in 0 until p.vertexCount) {
+                var x = buf.getFloat(v * 12); var y = buf.getFloat(v * 12 + 4); var z = buf.getFloat(v * 12 + 8)
+                if (!p.skinned) { Mat4.transformPoint(rest, p.node * 16, x, y, z, out); x = out[0]; y = out[1]; z = out[2] }
+                for (side in sides) {
+                    val ex = cx + side * 0.5f * e
+                    if (abs(x - ex) > 0.3f * e || abs(y - (cy - 0.62f * e)) > 0.2f * e) continue
+                    val f = z * sign; if (f < cz - 0.5f * e || f > cz + 1.5f * e) continue
+                    if (f > best) best = f
+                }
+            }
+        }
+        if (best == Float.NEGATIVE_INFINITY) return SKIN_FORWARD
+        return ((best - cz) / e + SKIN_MARGIN).coerceIn(0.05f, 1.2f)
+    }
+
+    /** How far in front of the eyes skin decals are placed (eye distances); see [measureSkinForward]. */
+    val skinForwardForTests: Float get() = skinForward
+
     private fun dist(a: FloatArray, b: FloatArray): Float { val x = a[0] - b[0]; val y = a[1] - b[1]; val z = a[2] - b[2]; return sqrt(x * x + y * y + z * z) }
     private fun smooth(e0: Float, e1: Float, x: Float): Float { val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
+
+    /** One line for logs: eye distance, measured skin depth, facing and where each visible decal is. */
+    fun debugLine(): String = "eyes=${"%.3f".format(eyeDistance)} hasEyes=$hasEyes skin=${"%.2f".format(skinForward)} facing=${"%.2f".format(facing)} " +
+        decals.joinToString(" ") { d -> "k${d.kind}${if (d.side < 0) "L" else "R"}:w=${"%.2f".format(d.weight)} p=(${"%.3f".format(d.matrix[12])},${"%.3f".format(d.matrix[13])},${"%.3f".format(d.matrix[14])})" }
 
     /** Used by tests to see the decal for a kind and side. */
     fun decal(kind: Int, side: Float): Decal? = decals.firstOrNull { it.kind == kind && abs(it.side - side) < 0.5f }

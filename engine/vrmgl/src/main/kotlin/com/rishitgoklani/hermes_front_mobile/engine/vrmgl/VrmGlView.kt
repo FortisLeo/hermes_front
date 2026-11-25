@@ -377,12 +377,13 @@ class VrmGlView(
         } catch (t: Throwable) { fatal("GL draw failed: ${t.message}", t) }
     }
 
-    private var faceFx: FaceFxRenderer? = null; private var faceFxBroken = false
+    private var faceFx: FaceFxRenderer? = null; private var faceFxBroken = false; private var fxLogTick = 0
     /** Blush, tears, sweat and anger marks on the face. A failure here only turns the effects off; it never stops the avatar. */
     private fun drawFaceEffects(m: GlModel, nowNanos: Long) {
         if (faceFxBroken) return
         try {
             m.faceFx.update(m.driver.face)
+            if (++fxLogTick % 45 == 0 && m.driver.face.decalWeight(0) + m.driver.face.decalWeight(1) > 0.05f) Log.i(TAG, "faceFx ${m.faceFx.debugLine()}")
             val r = faceFx ?: FaceFxRenderer().also { faceFx = it }
             r.draw(m.faceFx, vp, (nowNanos / 1_000_000L % 3_600_000L) / 1000f)
         } catch (t: Throwable) { faceFxBroken = true; Log.e(TAG, "Face effects disabled: ${t.message}", t); runCatching { GLES30.glGetError() }; main.post { if (!released) events?.onFaceEffectsUnavailable(t.message ?: "face effects failed") } }
