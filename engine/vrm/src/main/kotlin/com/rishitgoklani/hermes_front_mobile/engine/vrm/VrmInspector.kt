@@ -95,8 +95,7 @@ object VrmInspector {
         val meshes = root.a("meshes").mapIndexed { i, el ->
             val m = el.obj() ?: JsonObject(emptyMap()); val prims = m.a("primitives").mapNotNull { it.obj() }
             val verts = prims.sumOf { p -> p.o("attributes")?.i("POSITION")?.let { accessors.getOrNull(it).obj()?.i("count") } ?: 0 }
-            val names = (m.o("extras")?.a("targetNames") ?: prims.firstNotNullOfOrNull { p -> p.o("extras")?.a("targetNames")?.takeIf { it.isNotEmpty() } } ?: kotlinx.serialization.json.JsonArray(emptyList()))
-                .map { (it as? JsonPrimitive)?.contentOrNull ?: "" }
+            val names = VrmParser.morphTargetNames(root)[i].orEmpty()
             val count = maxOf(names.size, prims.maxOfOrNull { it.a("targets").size } ?: 0)
             MeshInfo(i, m.s("name") ?: "mesh$i", meshNodes[i].orEmpty(), prims.size, verts, prims.mapNotNull { it.i("material") }.distinct(),
                 List(count) { t -> names.getOrNull(t)?.takeIf { it.isNotBlank() } ?: "target$t" })

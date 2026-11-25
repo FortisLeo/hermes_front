@@ -19,6 +19,10 @@ class DriverInput(
     val pose: PoseSpec = PoseSpec(), val animation: AnimationSpec? = null,
     /** Name of a VRMA clip to play (empty = none); the driver asks [PoseDriver.clipSource] for its bytes. */
     val clip: String = "",
+    /** How strongly the mood shows (0..1), the reaction playing now ("" = none) and how strongly, what the bot is doing ("thinking", "listening", ...). */
+    val moodIntensity: Float = 1f, val reaction: String = "", val reactionIntensity: Float = 1f, val activity: String = "",
+    /** Effects to draw on the face: "blush", "tears", "sweatdrop", "angermark" are drawn by the engine, anything else is ignored here. */
+    val effects: Set<String> = emptySet(),
 )
 
 /** Where VRMA clip files come from (the app implements it with a folder of .vrma files). Return null when the clip does not exist. */
@@ -43,7 +47,6 @@ interface ClipPlayer {
 class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.random().toFloat() }) {
     companion object {
         private val REST = mapOf("leftUpperArm" to floatArrayOf(0f, 0f, 1.25f), "rightUpperArm" to floatArrayOf(0f, 0f, -1.25f))
-        private val MOODS = arrayOf("happy", "sad", "angry", "surprised", "relaxed", "neutral")
         private val ZERO = floatArrayOf(0f, 0f, 0f)
         private val BASE_BONES = arrayOf("leftUpperArm", "rightUpperArm", "spine", "chest", "neck", "head", "leftEye", "rightEye")
         private const val R_NONE = 0; private const val R_SPINE = 1; private const val R_NECK = 2; private const val R_HEAD = 3; private const val R_EYE = 4
@@ -73,10 +76,12 @@ class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.
     private val hipsNode = rig.asset.humanoid["hips"] ?: -1
     private val hips = OffsetSlot(hipsNode, true)
     private val aaIdx = rig.expressionIndex("aa"); private val blinkIdx = rig.expressionIndex("blink")
-    private val moodIdx = IntArray(MOODS.size) { rig.expressionIndex(MOODS[it]) }
-    private var moodCur = ""; private var moodHit = -1
+    /** Mood, reaction and activity recipes, easing and the on-face effect fades; the renderer reads the effect weights from here. */
+    val face = FaceMixer(rig)
 
     private var mouth = 0f; private var gx = 0f; private var gy = 0f
+    /** Gaze after the mood's own bias is added (thinking looks up and aside, shy looks down). */
+    private var egx = 0f; private var egy = 0f
     private var blinkIn = 2f; private var blinkT = -1f; private var time = 0f
     private var lastAnim: AnimationSpec? = null; private var animStartMs = 0L
     private var plan: AnimationSpec? = null; private var planDur = 0L; private var planLoop = false
@@ -122,7 +127,7 @@ class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.
     fun reset() {
         stopOwnedClip(); clipName = ""; clipCache.clear()
         bones.clear(); boneByName.clear(); offsets.clear(); offsetByName.clear(); exprs.clear(); exprByName.clear()
-        blinkT = -1f; lastAnim = null; lastPoseKey = null; plan = null; moodCur = ""; moodHit = -1
+        blinkT = -1f; lastAnim = null; lastPoseKey = null; plan = null; face.reset()
         rig.resetPose(); initBase()
     }
 
@@ -184,17 +189,17 @@ class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.
         val anim = input.animation?.takeIf { it.keyframes.isNotEmpty() }
         if (rebind) bind(input.pose, anim)
         if (input.clip != clipName) updateClip(input.clip)
-        if (input.mood != moodCur) { moodCur = input.mood; moodHit = MOODS.indexOf(input.mood) }
 
         val k = 1 - 0.001.pow(dt.toDouble()).toFloat()
         val kb = if (input.blendMs <= 0) 1f else 1 - exp(-dt / (input.blendMs / 1000f / 3f))
         mouth += (input.mouth - mouth) * k; gx += (input.gazeX - gx) * k; gy += (input.gazeY - gy) * k
+        face.update(dt, input); egx = gx + face.gazeX; egy = gy + face.gazeY
         val direct = anim != null
         var at = 0f
         if (direct) { val t = (nowMs - animStartMs); at = (if (planLoop && planDur > 0) t % planDur else minOf(t, planDur)).toFloat() }
         val clipPlayer = clip; val clipOn = clipPlayer?.active == true
         moving = direct || clipOn || mouth > 0.02f || input.mouth > 0.02f || (nowMs - lastPoseChangeMs) < input.blendMs + 200 ||
-            blinkT >= 0f || abs(gx - input.gazeX) > 0.003f || abs(gy - input.gazeY) > 0.003f
+            blinkT >= 0f || abs(gx - input.gazeX) > 0.003f || abs(gy - input.gazeY) > 0.003f || face.busy
 
         if (!clipOn) {
             val breathe = if (breathing) sin(time * 1.6f) * 0.012f else 0f
@@ -221,7 +226,7 @@ class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.
             }
         } else {
             clipPlayer!!.advance(dt, rig)
-            for (i in bones.indices) { val s = bones[i]; if (s.role == R_EYE && !clipPlayer.drivesNode(s.node)) rig.setBoneEuler(s.node, gy * 0.15f, -gx * 0.25f, 0f) }
+            for (i in bones.indices) { val s = bones[i]; if (s.role == R_EYE && !clipPlayer.drivesNode(s.node)) rig.setBoneEuler(s.node, egy * 0.15f, -egx * 0.25f, 0f) }
         }
 
         // Expressions: clip weights first, then the agent's on top, then lip sync, blink and mood.
@@ -242,18 +247,19 @@ class PoseDriver(private val rig: Rig, private val random: () -> Float = { Math.
                 if (blinkT > 0.18f) { blinkT = -1f; blinkIn = 2f + random() * 3f }
             }
         }
-        if (moodCur.isNotEmpty()) for (m in MOODS.indices) if (moodIdx[m] >= 0) rig.setExpression(moodIdx[m], if (m == moodHit) 0.8f else 0f)
+        face.apply()
         rig.applyExpressions()
     }
 
     private fun applyBone(s: BoneSlot, breathe: Float) {
-        val c = s.cur; var x = c[0]; var y = c[1]
+        val c = s.cur; var x = c[0]; var y = c[1]; var z = c[2]
+        val neck = if (boneByName.containsKey("neck")) 0.35f else 0f   // the neck takes a share of the head motion, the head the rest
         when (s.role) {
-            R_SPINE -> x += breathe
-            R_HEAD -> { x += gy * 0.15f; y += -gx * 0.3f }
-            R_NECK -> { x += gy * 0.1f; y += -gx * 0.2f }
-            R_EYE -> { x += gy * 0.15f; y += -gx * 0.25f }     // eyes lead the head a little: small angles on top of the head turn
+            R_SPINE -> x += breathe + face.spineX * 0.5f
+            R_NECK -> { x += egy * 0.1f + face.headX * neck; y += -egx * 0.2f + face.headY * neck; z += face.headZ * neck }
+            R_HEAD -> { x += egy * 0.15f + face.headX * (1f - neck); y += -egx * 0.3f + face.headY * (1f - neck); z += face.headZ * (1f - neck) }
+            R_EYE -> { x += egy * 0.15f; y += -egx * 0.25f }     // eyes lead the head a little: small angles on top of the head turn
         }
-        if (rig.isHumanoid(s.node)) rig.setBoneEuler(s.node, x, y, c[2]) else rig.setNodeEulerOffset(s.node, x, y, c[2])
+        if (rig.isHumanoid(s.node)) rig.setBoneEuler(s.node, x, y, z) else rig.setNodeEulerOffset(s.node, x, y, z)
     }
 }
