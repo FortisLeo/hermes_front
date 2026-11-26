@@ -17,7 +17,8 @@ step() { # <json args> <label> [expect-avatar=1]
   else echo "$2: FAIL nothing shown in ${WAIT}s"; fail=1; fi
   echo "$L" | grep -E '^(load|finish|stage) ' | sed 's/^/    /' | cut -c1-220
 }
-step "{\"action\":\"select\",\"id\":\"${IDS[0]}\"}" "select ${IDS[0]:0:8}"
+# Selecting the avatar that is already on screen shows nothing new, so this first step only has to leave the ring on IDS[0].
+step "{\"action\":\"select\",\"id\":\"${IDS[0]}\"}" "select ${IDS[0]:0:8} (may already be showing)" 0
 for k in $(seq 1 $((N - 1))); do step '{"action":"next"}' "next -> ${IDS[$k]:0:8}"; done
 step '{"action":"next"}' "next -> eyes" 0
 step '{"action":"next"}' "next -> ${IDS[0]:0:8} (from eyes: nothing staged)"
