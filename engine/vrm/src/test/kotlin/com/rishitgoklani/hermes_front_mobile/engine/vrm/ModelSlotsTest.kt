@@ -20,6 +20,7 @@ class ModelSlotsTest {
         fun finishTextures(key: String, r: Result<Unit> = Result.success(Unit)) { finishing.remove(key)!!(r) }
     }
     private fun slots(h: Host) = ModelSlots(h) { h.clock }
+    private fun texturedSlots(h: Host, allow: () -> Boolean = { true }) = ModelSlots(h, stageTextures = allow) { h.clock }
 
     @Test fun loadsActiveThenStagesTheNextGeometryOnlyAfterItShows() {
         val h = Host(); val s = slots(h); s.want("a", "b")
@@ -97,5 +98,20 @@ class ModelSlotsTest {
     @Test fun releaseAllClearsStateAndCancelsLoadsInFlight() {
         val h = Host(); val s = slots(h); s.want("a", null); h.finish("a"); s.want("a", "b"); s.releaseAll()
         assertEquals(0, s.resident); assertEquals(null, s.active); assertTrue("cancel b" in h.log)
+    }
+
+    @Test fun withEnoughMemoryTheStagedModelLoadsWithTexturesAndIsPromotedInOneStep() {
+        val h = Host(); val s = texturedSlots(h); s.want("a", "b"); h.finish("a")
+        assertEquals("load b", h.log.last())                          // not geometry-only
+        h.finish("b"); h.log.clear()
+        s.want("b", "c")
+        assertEquals(listOf("show b", "shown b 0 true", "dispose a", "load c"), h.log)   // no finish step: b goes on screen at once
+    }
+
+    @Test fun theStagingChoiceIsMadeWhenEachStagedLoadStarts() {
+        var roomy = true; val h = Host(); val s = texturedSlots(h) { roomy }; s.want("a", "b"); h.finish("a"); assertEquals("load b", h.log.last())
+        h.finish("b"); roomy = false; s.want("b", "c")
+        assertEquals("load c geometry", h.log.last())                // memory got tight: the next stage holds no textures
+        h.finish("c"); h.log.clear(); s.want("c", null); assertEquals(listOf("finish c"), h.log)
     }
 }

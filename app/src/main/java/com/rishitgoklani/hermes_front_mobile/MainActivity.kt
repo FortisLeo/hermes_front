@@ -102,13 +102,19 @@ class MainActivity : ComponentActivity() {
     private fun requestMissingPermissions() { val missing = PermissionGroup.entries.filter { !isGranted(it) }.mapNotNull(::androidPermission); if (missing.isNotEmpty()) permissionsAsked.launch(missing.toTypedArray()) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(savedInstanceState); StartupTrace.mark("activityOnCreate")
         enableEdgeToEdge()
         enterImmersive()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         refreshPermissions()
         seedFromDebugIntent()
         BotService.start(this)
+        // Before any UI exists: decode the saved avatar's poster and start parsing/decoding its model, so the first frame can show
+        // the poster and the 3D view only has to upload when it is ready.
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { container.startupAvatar()?.let { p -> container.avatarStartup.start(p.id, p.textureCap, landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE); StartupTrace.mark("startupPreloadQueued") } }
+        }
+        StartupTrace.mark("setContent")
         setContent {
             val theme by container.theme.collectAsStateWithLifecycle()
             val primary = runCatching { Color(android.graphics.Color.parseColor(theme.primaryHex)) }.getOrDefault(Color.Cyan)
@@ -126,7 +132,9 @@ class MainActivity : ComponentActivity() {
         var section by remember { mutableStateOf<Section?>(Section.entries.firstOrNull { it.name.equals(intent?.getStringExtra("section"), true) }) }
         val chat = container.chatViewModel(this); val settings = container.settingsViewModel(this); val liveSettings = container.liveSettingsViewModel(this); val voice = container.voiceViewModel(this); val debug = container.debugViewModel(this)
         val carousel = container.avatarCarouselViewModel(this)
+        androidx.compose.runtime.LaunchedEffect(Unit) { StartupTrace.mark("firstComposition") }
         val head = remember { mutableStateOf(Triple(0.5f, 0.3f, 0.15f)) }
+        val engineFaceEffects = remember { mutableStateOf(true) }   // false once the engine reports it cannot draw them
         val viewerEvents = remember(carousel) { object : com.rishitgoklani.hermes_front_mobile.ui.avatar.ViewerEvents {
             override fun onShown(key: String, ms: Long, wasStaged: Boolean) = carousel.onShown(key, ms, wasStaged)
             override fun onStaged(key: String, ms: Long) = carousel.onStaged(key, ms)
@@ -134,6 +142,7 @@ class MainActivity : ComponentActivity() {
             override fun onFatal(message: String) = carousel.onFatal(message)
             override fun onNodes(names: List<String>) = container.avatar.setNodes(names)
             override fun onHead(x: Float, y: Float, size: Float) { head.value = Triple(x, y, size) }
+            override fun onFaceEffectsUnavailable(message: String) { engineFaceEffects.value = false }
         } }
         val face by container.face.state.collectAsStateWithLifecycle()
         val chatState by chat.state.collectAsStateWithLifecycle(); val voiceState by voice.state.collectAsStateWithLifecycle()
@@ -192,19 +201,25 @@ class MainActivity : ComponentActivity() {
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
                 val settingsUi by settings.state.collectAsStateWithLifecycle()
                 val renderQuality = settingsUi.displayQuality
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (carouselUi.active != null) ({
+                val startupPosterKey by container.avatarStartup.posterKey.collectAsStateWithLifecycle()
+                androidx.compose.runtime.LaunchedEffect(carouselUi.loaded) { if (carouselUi.loaded) StartupTrace.mark("carouselLoaded") }
+                androidx.compose.runtime.LaunchedEffect(carouselUi.active != null) { if (carouselUi.active != null) StartupTrace.mark("avatarRequested") }
+                // Blush, tears, sweat and anger marks are drawn by the engine on the 3D face; the 2D overlay keeps hearts, sparkles, Zzz and the like.
+                val faceEffects = com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarPoster(startupPosterKey, container.avatarPosters, container.avatarStartup) } })   // saved slot not read yet: draw nothing, so the default eyes never flash
+                    else if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
                         // A new quality level rebuilds the GL view so the new switches (outlines, physics, texture format) take effect.
-                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality) }
-                        // While the viewer is still loading the model (e.g. coming from the eyes) the eyes stay on screen, then fade out.
-                        androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))) {
-                            com.rishitgoklani.hermes_front_mobile.ui.face.FaceView(bot, face, Modifier.fillMaxSize(), mouth = mouth, backgroundColor = background)
+                        androidx.compose.runtime.key(renderQuality) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarView(av, container.avatarDir, container.avatarLibraryDir, carouselUi.active, carouselUi.staged, viewerEvents, snapshots = container.avatarSnapshots, displayQuality = renderQuality, effects = faceEffects, activity = bot.name, startup = container.avatarStartup, posters = container.avatarPosters) }
+                        // While the viewer is still loading the model it stays behind a plain cover that fades away: the eyes must not flash first.
+                        androidx.compose.animation.AnimatedVisibility(visible = !carouselUi.ready, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))) {
+                            Box(Modifier.fillMaxSize().background(background)) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarPoster(carouselUi.active?.key, container.avatarPosters, container.avatarStartup) }
                         }
-                        com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects, head.value.first, head.value.second, head.value.third)
+                        com.rishitgoklani.hermes_front_mobile.ui.face.FaceEffectsOverlay(if (engineFaceEffects.value) faceEffects - com.rishitgoklani.hermes_front_mobile.ui.avatar.EngineInputMapper.engineEffects else faceEffects, head.value.first, head.value.second, head.value.third)
                     } }) else null, onAction = { a -> scope.launch { container.runCapability(a.tool, a.args) } }, onTap = { interact() }, backgroundColor = background,
-                    onSwipeNext = if (section == null && liveScreen == null && carouselUi.slotCount > 1) carousel::swipeNext else null,
+                    onSwipeNext = if (section == null && liveScreen == null && carouselUi.slotCount > 1) (suspend { carousel.swipeNextAndAwait() }) else null,
                     overlay = {
-                        if (liveScreen == null) { if (!inPip.value) { if (carouselUi.slot is AvatarSlot.Model) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
+                        if (liveScreen == null) { if (!inPip.value && carouselUi.loaded) { if (carouselUi.slot is AvatarSlot.Model) FaceClock(statusLine, Modifier.align(Alignment.TopStart), compact = true) else FaceClock(statusLine, Modifier.align(Alignment.BottomCenter)) } }
                         else Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 420.dp).padding(12.dp)) {
                             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))) {
                                 Column {

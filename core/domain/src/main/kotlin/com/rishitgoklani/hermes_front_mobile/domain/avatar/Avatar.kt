@@ -1,6 +1,7 @@
 package com.rishitgoklani.hermes_front_mobile.domain.avatar
 
 import com.rishitgoklani.hermes_front_mobile.domain.face.Mood
+import com.rishitgoklani.hermes_front_mobile.domain.face.Reaction
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -18,7 +19,7 @@ data class AvatarKeyframe(val tMs: Int, val pose: AvatarPose)
 data class AvatarAnimation(val keyframes: List<AvatarKeyframe>, val loop: Boolean)
 
 data class AvatarState(
-    val enabled: Boolean = false, val mood: Mood = Mood.Neutral, val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f,
+    val enabled: Boolean = false, val mood: Mood = Mood.Neutral, val moodIntensity: Float = 1f, val reaction: Reaction? = null, val reactionIntensity: Float = 1f, val mouth: Float = 0f, val gazeX: Float = 0f, val gazeY: Float = 0f,
     val pose: AvatarPose = AvatarPose(), val blendMs: Int = 250, val animation: AvatarAnimation? = null, val clip: String = "",
 )
 
@@ -32,6 +33,8 @@ class AvatarController {
     fun setNodes(names: List<String>) { _nodes.value = names }
     fun setEnabled(v: Boolean) = _state.update { it.copy(enabled = v) }
     fun setMood(m: Mood) = _state.update { it.copy(mood = m) }
+    /** Mood and the reaction playing now, with how strongly each shows (the face controller's state). */
+    fun setFace(mood: Mood, moodIntensity: Float, reaction: Reaction?, reactionIntensity: Float) = _state.update { it.copy(mood = mood, moodIntensity = moodIntensity, reaction = reaction, reactionIntensity = reactionIntensity) }
     fun setMouth(v: Float) = _state.update { it.copy(mouth = v) }
     fun look(x: Float?, y: Float?) = _state.update { it.copy(gazeX = x ?: 0f, gazeY = y ?: 0f) }
     fun setPose(p: AvatarPose, blendMs: Int) = _state.update { it.copy(pose = p, blendMs = blendMs, animation = null, clip = "") }

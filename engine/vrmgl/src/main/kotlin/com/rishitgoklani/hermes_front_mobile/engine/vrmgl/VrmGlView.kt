@@ -27,6 +27,8 @@ import com.rishitgoklani.hermes_front_mobile.engine.vrm.ModelSlots
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.SlotHost
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.TextureBudgeting
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.TrimAction
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmInfo
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmInspector
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.VrmParser
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.gltf.Glb
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.math.Mat4
@@ -40,6 +42,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.TexturePipeline
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.ImageInfo
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -52,6 +57,10 @@ interface VrmEvents {
     fun onStaged(key: String, ms: Long) {}
     fun onError(key: String, message: String) {}
     fun onNodes(names: List<String>) {}
+    /** Names, expressions, morph targets, look-at and licence of a model that finished parsing (see [VrmInspector]). */
+    fun onInfo(key: String, info: VrmInfo) {}
+    /** The 3D blush/tears/sweat/anger effects could not be drawn (shader or GL error); the host should draw them in 2D instead. Sent once. */
+    fun onFaceEffectsUnavailable(message: String) {}
     fun onHead(x: Float, y: Float, size: Float) {}
     /** The renderer hit an unrecoverable GL error (shader compile, EGL). The host should fall back to the Eyes face. */
     fun onFatal(message: String) {}
@@ -98,9 +107,24 @@ class VrmGlView(
     var clipsDir: File? = null
 
     @Volatile private var input = DriverInput()
+    // benchmark bookkeeping (main thread, except firstFramesToLog which the GL thread reads)
+    private val createdAt = LoadPerf.nowMs(); private var firstWantAt: Long? = null; private var firstShownLogged = false
+    private val wantedAt = HashMap<String, Long>()
+    @Volatile private var firstFramesToLog = 0
     @Volatile private var active: GlModel? = null
     private val main = Handler(Looper.getMainLooper())
     private val loader = Executors.newSingleThreadExecutor { r -> Thread(r, "vrm-loader").also { it.priority = Thread.NORM_PRIORITY - 1 } }
+    /** Two decode threads: textures decode in parallel and are uploaded as each one is ready (at most 3 decoded images alive at once). */
+    private val decodePool = Executors.newFixedThreadPool(2) { r -> Thread(r, "vrm-decode").also { it.priority = Thread.NORM_PRIORITY - 1; it.isDaemon = true } }
+    private val pipeline = TexturePipeline(decodePool, maxAlive = 3)
+    /** Shader variants are compiled once per GL context and shared by every model (GL thread only; dropped with the context). */
+    private var programs: ProgramCache? = null
+    private fun programCache(): ProgramCache = programs ?: ProgramCache().also { programs = it }
+    /** Set by the host: a model parsed and decoded ahead of time (app start) is taken from here instead of being loaded again. */
+    var preloader: ModelPreloader? = null
+    /** Set by the host: parsed models and ETC2 textures cached on disk, used when valid and built in the background otherwise. */
+    var cache: ModelCache? = null
+    @Volatile private var posterRequest: Pair<Float, (ByteArray?) -> Unit>? = null
     private val specs = HashMap<String, ModelSpec>()
     private var lastWantActive: ModelSpec? = null; private var lastWantStaged: ModelSpec? = null
 
@@ -126,7 +150,8 @@ class VrmGlView(
     private val choreographer by lazy { Choreographer.getInstance() }
     private var looping = false
     private var windowVisible = true
-    private val memory = MemoryPolicy((context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice)
+    private val lowRamDevice = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice
+    private val memory = MemoryPolicy(lowRamDevice)
     private var stagedSuppressed = false; private var releasedForMemory = false
 
     private val frame = object : Choreographer.FrameCallback {
@@ -144,7 +169,7 @@ class VrmGlView(
     private val backgroundRelease = Runnable { if (paused) dropGlContext() }
 
     /** Anything that makes the next frames differ: animation, a recent input, GL work waiting, a snapshot. */
-    private fun isMoving(): Boolean = active?.driver?.moving == true || SystemClock.uptimeMillis() < busyUntil || queue.hasWork || thumbRequest != null || !springsSettled()
+    private fun isMoving(): Boolean = active?.driver?.moving == true || SystemClock.uptimeMillis() < busyUntil || queue.hasWork || thumbRequest != null || posterRequest != null || !springsSettled()
     /** Integrator hook: true once the hair/cloth springs have come to rest (e.g. SpringSimulation.settled). Until it exists the 3 s quiet period covers it. */
     private fun springsSettled(): Boolean = active?.springs?.settled ?: true
 
@@ -158,7 +183,8 @@ class VrmGlView(
     private fun wakeFromAnyThread() { if (Looper.myLooper() == Looper.getMainLooper()) wake() else main.post { wake() } }
 
     private class Op { val cancelled = AtomicBoolean(false); fun check() { if (cancelled.get()) throw CancellationException("cancelled") } }
-    private class Resident(val model: GlModel, val glb: Glb, val spec: ModelSpec) { @Volatile var textureBytes = 0L; @Volatile var op: Op? = null }
+    /** [glb] opens the model file on first use only: a model loaded from the caches never needs it. */
+    private class Resident(val model: GlModel, glbSource: Lazy<Glb>, val spec: ModelSpec) { val glb by glbSource; @Volatile var textureBytes = 0L; @Volatile var op: Op? = null }
     private val loads = ConcurrentHashMap<String, Op>()
     private val residents = ConcurrentHashMap.newKeySet<Resident>()
 
@@ -167,7 +193,8 @@ class VrmGlView(
         if (dir == null || name.isEmpty() || '/' in name || ".." in name) null else File(dir, "$name.vrma").takeIf { it.isFile }?.readBytes()
     }
 
-    private val slots = ModelSlots(object : SlotHost<Resident> {
+    // The model staged behind the active one gets its textures too (so a swipe to it is one frame), unless memory is tight.
+    private val slots = ModelSlots(stageTextures = { !lowRamDevice && !stagedSuppressed }, host = object : SlotHost<Resident> {
         override fun load(key: String, withTextures: Boolean, done: (Result<Resident>) -> Unit) = this@VrmGlView.load(key, withTextures, done)
         override fun finishShow(key: String, model: Resident, done: (Result<Unit>) -> Unit) = this@VrmGlView.finishTextures(model, done)
         override fun cancel(key: String) { loads.remove(key)?.cancelled?.set(true) }
@@ -181,7 +208,15 @@ class VrmGlView(
             if (active === model.model) active = null
             queueEvent { runCatching { model.model.release() } }
         }
-        override fun shown(key: String, ms: Long, wasStaged: Boolean) { events?.onShown(key, ms, wasStaged) }
+        override fun shown(key: String, ms: Long, wasStaged: Boolean) {
+            val now = LoadPerf.nowMs(); val asked = wantedAt.remove(key)
+            Log.i(LoadPerf.TAG, "shown ${key.take(8)} staged=$wasStaged slotMs=$ms want->shown=${asked?.let { now - it } ?: -1}")
+            if (!firstShownLogged) { firstShownLogged = true
+                val p = android.os.Process.getStartElapsedRealtime()
+                Log.i(LoadPerf.TAG, "coldstart process->viewCreated=${createdAt - p} process->firstWant=${firstWantAt?.let { it - p } ?: -1} process->firstShown=${now - p}") }
+            firstFramesToLog = 3
+            events?.onShown(key, ms, wasStaged)
+        }
         override fun staged(key: String, ms: Long) { events?.onStaged(key, ms) }
         override fun failed(key: String, message: String) { events?.onError(key, message) }
     })
@@ -193,6 +228,8 @@ class VrmGlView(
                 try {
                     val v = IntArray(1); GLES30.glGetIntegerv(GLES30.GL_MAX_VERTEX_UNIFORM_VECTORS, v, 0); uniformLimit = v[0]
                     GLES30.glClearColor(BG_R, BG_G, BG_B, 1f); GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+                    faceFx = null; faceFxBroken = false; programs = null   // a new GL context starts without the old programs
+                    if (glGeneration == 0) Log.i(LoadPerf.TAG, "startup glSurface=${LoadPerf.nowMs() - android.os.Process.getStartElapsedRealtime()}")
                     val gen = ++glGeneration; if (gen > 1) main.post { reloadAfterContextLoss() }
                 } catch (t: Throwable) { fatal("GL setup failed: ${t.message}", t) }
             }
@@ -210,11 +247,22 @@ class VrmGlView(
         lastWantActive = activeSpec; lastWantStaged = stagedSpec
         activeSpec?.let { specs[it.key] = it }; stagedSpec?.let { specs[it.key] = it }
         if (released || dead) return
+        activeSpec?.key?.let { k -> if (k != slots.active && !wantedAt.containsKey(k)) wantedAt[k] = LoadPerf.nowMs() }
+        if (firstWantAt == null && activeSpec != null) firstWantAt = LoadPerf.nowMs()
         slots.want(activeSpec?.key, if (stagedSuppressed) null else stagedSpec?.key)
         wake()
     }
     fun retry(key: String) = slots.retry(key)
     val residentModels get() = slots.resident
+
+    /**
+     * A JPEG of the whole view at [scale] (e.g. 0.5), to show the next time the app opens while the model loads. The frame is read
+     * after the next draw that has a model on screen; [done] runs on the main thread (null if there is no model or the view is gone).
+     */
+    fun capturePoster(scale: Float = 0.5f, done: (ByteArray?) -> Unit) {
+        if (released || dead) { main.post { done(null) }; return }
+        posterRequest = scale to done; wake(); requestRender()
+    }
 
     /** A small square PNG of the current frame, for library thumbnails. */
     fun snapshot(size: Int, done: (ByteArray?) -> Unit) {
@@ -273,7 +321,8 @@ class VrmGlView(
         released = true; running = false; paused = true
         stopLoop(); main.removeCallbacksAndMessages(null)
         slots.releaseAll(); active = null; queue.clear(); thumbRequest?.let { (_, cb) -> thumbRequest = null; cb(null) }
-        loader.shutdownNow()
+        posterRequest?.let { (_, cb) -> posterRequest = null; cb(null) }
+        loader.shutdownNow(); decodePool.shutdownNow()
     }
 
     private fun reloadAfterContextLoss() {
@@ -292,52 +341,146 @@ class VrmGlView(
         val op = Op(); loads.put(key, op)?.cancelled?.set(true)
         if (released || loader.isShutdown) return
         runCatching { loader.execute {
-            var model: GlModel? = null
+            var model: GlModel? = null; var inspectLater = false
             val r = runCatching {
                 op.check()
-                val glb = Glb.open(spec.file); val asset = VrmParser.parse(glb)
-                
-                val m = onGl(op) { GlModel(asset, config) }; model = m; onGl(op) { m.prewarm() }
+                val perf = LoadPerf(if (withTextures) "load" else "stage", key)
+                // Prepared ahead of time (app start)? Then only the GPU upload is left.
+                val pre = if (withTextures) preloader?.take(spec, config, textureBudgetBytes) else null
+                if (pre != null) perf.put("preloaded", "${pre.bitmaps.size}img/${pre.ms}ms")
+                perf.mark("preloadWait")
+                // The model file is opened only if something needs it: no parsed cache, or textures to decode from it.
+                val glb = lazy { pre?.glb ?: Glb.open(spec.file) }
+                val cached = if (pre == null) cache?.asset(spec) { view -> glbViewBytes(glb.value, view) } else null
+                val asset = pre?.asset ?: cached ?: VrmParser.parse(glb.value).also { perf.mark("parse") }
+                perf.put("source", when { pre != null -> "preload"; cached != null -> "cache"; else -> "glb" }); perf.mark("asset")
+                perf.put("bytes", spec.file.length()); perf.put("verts", asset.primitives.sumOf { it.vertexCount }); perf.put("prims", asset.primitives.size)
+                // Inspecting needs the GLB's JSON: do it now only if the file is open anyway, else after the model is shown.
+                if (glb.isInitialized()) { (pre?.info ?: runCatching { VrmInspector.inspect(glb.value) }.getOrNull())?.let { reportInfo(key, it) }; perf.mark("inspect") }
+                val t = LongArray(2)
+                val m = onGl(op, t) { GlModel(asset, config, programCache()) }; model = m; perf.put("gpuWait", t[0]); perf.put("gpuRun", t[1]); perf.mark("gl")
                 m.driver.clipSource = clipSource
                 val res = Resident(m, glb, spec); residents.add(res)
-                if (withTextures) loadTextures(res, op)
+                inspectLater = !glb.isInitialized()
+                if (withTextures) {
+                    loadTextures(res, op, perf, pre); perf.mark("textures")
+                    // Compile the shader variants now that the textures exist (before, they were compiled for the untextured
+                    // look and the textured ones were compiled in the first frame on screen).
+                    onGl(op, t) { m.prewarm() }; perf.put("shaderWait", t[0]); perf.put("shaderRun", t[1]); perf.mark("shaders")
+                } else pre?.recycle()
+                perf.log()
                 res
             }
             r.onFailure { model?.let { m -> queueEvent { runCatching { m.release() } } } }
             main.post { loads.remove(key, op); if (!released) done(r) }
+            // After handing the model over, off the critical path: the face effects' vertex scan, the model summary if it was loaded
+            // from the cache, and building whatever cache the model is still missing (in the background, a few seconds later).
+            r.getOrNull()?.let { res ->
+                val p0 = LoadPerf.nowMs(); runCatching { res.model.faceFx.prepare() }; Log.i(LoadPerf.TAG, "faceFx ${key.take(8)} prepare=${LoadPerf.nowMs() - p0}")
+                if (inspectLater) runCatching { VrmInspector.inspect(res.glb) }.getOrNull()?.let { reportInfo(key, it) }
+                cache?.schedule(spec, res.model.asset) { res.glb }
+            }
         } }
     }
+
+    private fun reportInfo(key: String, info: VrmInfo) { Log.i(TAG, "model $key\n${info.summary()}"); main.post { if (!released) events?.onInfo(key, info) } }
 
     /** Geometry-only model about to go on screen: decode and upload its textures, still one image at a time. */
     private fun finishTextures(res: Resident, done: (Result<Unit>) -> Unit) {
         val op = Op(); res.op = op
         runCatching { loader.execute {
-            val r = runCatching { loadTextures(res, op) }
+            val perf = LoadPerf("finish", res.spec.key)
+            val r = runCatching { loadTextures(res, op, perf); perf.mark("textures"); onGl(op) { res.model.prewarm() }; perf.mark("shaders") }
+            perf.log()
             main.post { if (!released) done(r) }
         } }.onFailure { done(Result.failure(it)) }
     }
 
-    /** Decode each used image (cap chosen so all of them fit the shared budget) and hand it to the GL thread through the queue. */
-    private fun loadTextures(res: Resident, op: Op) {
-        val asset = res.model.asset; val need = ImageFormats.needsAlpha(asset); val used = TextureLoader.usedImages(asset)
-        val sizes = used.map { img -> GlbImageSlices.slice(res.glb, asset, img)?.let { TextureLoader.bounds(it) } }
-        val infos = used.indices.mapNotNull { i -> sizes[i]?.let { TextureLoader.info(it, need[used[i]], config.rgb565) } }
+    /**
+     * Decode the used images (cap chosen so all of them fit the shared budget) on the decode pool and queue each upload as soon as it is
+     * ready; the GL thread runs several uploads per frame. Images the preloader already decoded at the same cap are uploaded directly.
+     */
+    private fun loadTextures(res: Resident, op: Op, perf: LoadPerf? = null, pre: ModelPreloader.Ready? = null) {
+        val asset = res.model.asset
         val others = residents.filter { it !== res }.sumOf { it.textureBytes }
-        val cap = TextureBudgeting.capFor(infos, res.spec.texCap, TextureBudgeting.availableBytes(textureBudgetBytes, others))
-        for ((i, img) in used.withIndex()) {
-            op.check()
-            val size = sizes[i] ?: continue; val slice = GlbImageSlices.slice(res.glb, asset, img) ?: continue
-            val bmp = TextureLoader.decode(slice, size, cap, need[img], config.rgb565) ?: continue
-            val bytes = bmp.allocationByteCount.toLong() * 4 / 3
-            onGl(op) { try { res.model.uploadTexture(img, bmp) } finally { bmp.recycle() } }   // recycled on the GL thread; a dropped task leaves it to the GC
-            res.textureBytes += bytes
-        }
+        val packed = if (config.compressTextures) cache?.textures(res.spec)?.takeIf { it.covers(TextureLoader.usedImages(asset)) } else null
+        if (packed != null) { pre?.recycle(); return loadPacked(res, op, perf, packed, others) }
+        val plan = TexturePlan.of(res.glb, asset, config.rgb565, res.spec.texCap, TextureBudgeting.availableBytes(textureBudgetBytes, others))
+        val ready = pre?.takeIf { it.cap == plan.cap }?.bitmaps; if (pre != null && ready == null) pre.recycle()
+        val decodeMs = AtomicLong(); val waitMs = AtomicLong(); val runMs = AtomicLong(); val px = AtomicLong(); val reused = AtomicLong()
+        var waited = 0L
+        try {
+            pipeline.run(plan.images,
+                decode = { img ->
+                    if (op.cancelled.get()) null
+                    else ready?.remove(img)?.also { reused.incrementAndGet() } ?: run {
+                        val d0 = LoadPerf.nowMs()
+                        GlbImageSlices.slice(res.glb, asset, img)?.let { TextureLoader.decode(it, plan.sizes.getValue(img), plan.cap, plan.alpha[img], config.rgb565) }
+                            .also { decodeMs.addAndGet(LoadPerf.nowMs() - d0) }
+                    }
+                },
+                upload = { img, bmp, done ->
+                    val queued = LoadPerf.nowMs()
+                    queue.add {
+                        val s0 = LoadPerf.nowMs(); waitMs.addAndGet(s0 - queued)
+                        try {
+                            if (op.cancelled.get()) done(CancellationException("cancelled"))
+                            else { val bytes = bmp.allocationByteCount.toLong() * 4 / 3; px.addAndGet(bmp.width.toLong() * bmp.height); res.model.uploadTexture(img, bmp); res.textureBytes += bytes; done(null) }
+                        } catch (t: Throwable) { done(t) } finally { bmp.recycle(); runMs.addAndGet(LoadPerf.nowMs() - s0) }   // recycled on the GL thread; a dropped task leaves it to the GC
+                    }
+                    wakeFromAnyThread()
+                },
+                discard = { it.recycle() },
+                abortCheck = {
+                    if (op.cancelled.get() || released) { op.cancelled.set(true); throw CancellationException("cancelled") }
+                    if (dead) { op.cancelled.set(true); throw IllegalStateException("GL stopped") }
+                    if (running) waited += 250   // time spent paused or hidden does not count
+                    if (waited > GL_WAIT_LIMIT_MS) { op.cancelled.set(true); throw IllegalStateException("GL thread did not respond") }
+                })
+        } finally { ready?.values?.forEach { it.recycle() }; ready?.clear() }
+        perf?.put("images", plan.images.size); perf?.put("cap", plan.cap); perf?.put("mpx", "%.1f".format(px.get() / 1e6)); perf?.put("reused", reused.get())
+        perf?.put("decode", decodeMs.get()); perf?.put("uploadWait", waitMs.get()); perf?.put("uploadRun", runMs.get())
+    }
+
+    /**
+     * Upload the model's textures straight from the ETC2 cache: nothing to decode, so each image is one GL task. The cap is chosen
+     * from the compressed sizes (1 byte per pixel at most), and each image starts at the mip level that fits it.
+     */
+    private fun loadPacked(res: Resident, op: Op, perf: LoadPerf?, packed: com.rishitgoklani.hermes_front_mobile.engine.vrm.TextureCacheFile.Contents, others: Long) {
+        val used = TextureLoader.usedImages(res.model.asset)
+        val cap = TextureBudgeting.capFor(used.map { val im = packed.images.getValue(it); ImageInfo(im.width, im.height, 1) }, res.spec.texCap, TextureBudgeting.availableBytes(textureBudgetBytes, others))
+        val waitMs = AtomicLong(); val runMs = AtomicLong(); var waited = 0L
+        pipeline.run(used, decode = { it },
+            upload = { img, _, done ->
+                val im = packed.images.getValue(img); val first = im.firstLevelFor(cap); val queued = LoadPerf.nowMs()
+                queue.add {
+                    val s0 = LoadPerf.nowMs(); waitMs.addAndGet(s0 - queued)
+                    try {
+                        if (op.cancelled.get()) done(CancellationException("cancelled"))
+                        else { res.model.uploadCompressed(img, im.glFormat, im.levels.drop(first).map { Triple(it.width, it.height, packed.data(it)) }); res.textureBytes += im.bytesFrom(first); done(null) }
+                    } catch (t: Throwable) { done(t) } finally { runMs.addAndGet(LoadPerf.nowMs() - s0) }
+                }
+                wakeFromAnyThread()
+            },
+            discard = {},
+            abortCheck = {
+                if (op.cancelled.get() || released) { op.cancelled.set(true); throw CancellationException("cancelled") }
+                if (dead) { op.cancelled.set(true); throw IllegalStateException("GL stopped") }
+                if (running) waited += 250
+                if (waited > GL_WAIT_LIMIT_MS) { op.cancelled.set(true); throw IllegalStateException("GL thread did not respond") }
+            })
+        perf?.put("textures", "etc2"); perf?.put("images", used.size); perf?.put("cap", cap); perf?.put("uploadWait", waitMs.get()); perf?.put("uploadRun", runMs.get())
     }
 
     /** Run [block] on the GL thread inside a frame (at most one queued task per frame) and wait for it. Never waits forever. */
-    private fun <T> onGl(op: Op, block: () -> T): T {
-        var out: Result<T>? = null; val latch = CountDownLatch(1)
-        queue.add { out = if (op.cancelled.get()) Result.failure(CancellationException("cancelled")) else runCatching(block); latch.countDown() }
+    private fun <T> onGl(op: Op, timing: LongArray? = null, block: () -> T): T {
+        var out: Result<T>? = null; val latch = CountDownLatch(1); val queued = LoadPerf.nowMs()
+        queue.add {
+            val s = LoadPerf.nowMs()
+            out = if (op.cancelled.get()) Result.failure(CancellationException("cancelled")) else runCatching(block)
+            timing?.let { it[0] = s - queued; it[1] = LoadPerf.nowMs() - s }   // [0] waited for a frame, [1] ran on the GL thread
+            latch.countDown()
+        }
         wakeFromAnyThread()
         var waited = 0L
         while (!latch.await(250, TimeUnit.MILLISECONDS)) {
@@ -352,8 +495,11 @@ class VrmGlView(
     // ---- drawing (GL thread) ----
     private fun drawFrame() {
         if (dead || released) return
+        val f0 = System.nanoTime(); var ranTask = 0
         try {
-            queue.drain()                                            // one texture / model upload per frame, ~4 ms budget
+            // GL work handed over by loaders: several uploads per frame. Up to 10 ms while a model is on screen (it keeps animating),
+            // up to 40 ms while nothing is shown yet (nothing to keep smooth; the sooner the model is up, the better).
+            ranTask = queue.drain(budgetNanos = if (active == null) 40_000_000L else 10_000_000L, maxTasks = 32)
             val now = System.nanoTime(); val dt = if (lastNanos == 0L) 0.033f else ((now - lastNanos) / 1e9f).coerceIn(0.001f, 0.1f); lastNanos = now
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
             val m = active; val f = framing
@@ -363,10 +509,27 @@ class VrmGlView(
                 m.updateMorphs()
                 val camDist = Math.abs(f.eyeZ - f.targetZ); Mat4.perspective(f.fovY, width.toFloat() / height, maxOf(0.05f, camDist - 1.5f), camDist + 3f, proj); Mat4.lookAt(f.eyeX, f.eyeY, f.eyeZ, f.targetX, f.targetY, f.targetZ, viewM); Mat4.mul(proj, 0, viewM, 0, vp, 0)
                 m.draw(vp, light, poseChanged)
+                drawFaceEffects(m, now)
                 if (++headTick % 6 == 0) reportHead(m, f)
             }
             thumbRequest?.let { (size, cb) -> thumbRequest = null; cb2(size, cb) }
+            if (m != null) posterRequest?.let { (scale, cb) -> posterRequest = null; readPoster(scale, cb) }
+            val ms = (System.nanoTime() - f0) / 1_000_000
+            if (firstFramesToLog > 0 && m != null) { firstFramesToLog--; Log.i(LoadPerf.TAG, "frame after show ${ms}ms") }
+            else if (ms > 34) Log.i(LoadPerf.TAG, "long frame ${ms}ms task=$ranTask")
         } catch (t: Throwable) { fatal("GL draw failed: ${t.message}", t) }
+    }
+
+    private var faceFx: FaceFxRenderer? = null; private var faceFxBroken = false; private var fxLogTick = 0
+    /** Blush, tears, sweat and anger marks on the face. A failure here only turns the effects off; it never stops the avatar. */
+    private fun drawFaceEffects(m: GlModel, nowNanos: Long) {
+        if (faceFxBroken) return
+        try {
+            m.faceFx.update(m.driver.face)
+            if (++fxLogTick % 45 == 0 && m.driver.face.decalWeight(0) + m.driver.face.decalWeight(1) > 0.05f) Log.i(TAG, "faceFx ${m.faceFx.debugLine()}")
+            val r = faceFx ?: FaceFxRenderer().also { faceFx = it }
+            r.draw(m.faceFx, vp, (nowNanos / 1_000_000L % 3_600_000L) / 1000f)
+        } catch (t: Throwable) { faceFxBroken = true; Log.e(TAG, "Face effects disabled: ${t.message}", t); runCatching { GLES30.glGetError() }; main.post { if (!released) events?.onFaceEffectsUnavailable(t.message ?: "face effects failed") } }
     }
 
     private val tmp = FloatArray(3)
@@ -380,6 +543,19 @@ class VrmGlView(
         val a = ndc(face); val b = ndc(top); val c = ndc(c0)
         val x = (a[0] + 1) / 2; val y = (1 - a[1]) / 2; val size = Math.abs(b[1] - c[1]) / 2
         main.post { events?.onHead(x, y, size) }
+    }
+
+    private fun readPoster(scale: Float, cb: (ByteArray?) -> Unit) {
+        val w = width; val h = height
+        val buf = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder()); GLES30.glReadPixels(0, 0, w, h, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buf)
+        Thread {
+            val r = runCatching {
+                val raw = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); raw.copyPixelsFromBuffer(buf)
+                val out = Bitmap.createBitmap(raw, 0, 0, w, h, Matrix().apply { preScale(scale, -scale) }, true); raw.recycle()   // GL rows are bottom-up
+                ByteArrayOutputStream().also { out.compress(Bitmap.CompressFormat.JPEG, 85, it); out.recycle() }.toByteArray()
+            }.getOrNull()
+            main.post { cb(r) }
+        }.start()
     }
 
     private fun cb2(size: Int, cb: (ByteArray?) -> Unit) {

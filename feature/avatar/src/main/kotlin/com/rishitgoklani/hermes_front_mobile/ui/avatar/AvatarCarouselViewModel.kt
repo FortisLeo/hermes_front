@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,6 +34,8 @@ data class CarouselUi(
     val slotCount: Int = 1,
     /** Native 3D was switched off because the GPU path crashed or kept failing; the face stays on Eyes until the user retries. */
     val nativeDisabled: Boolean = false,
+    /** The saved slot and the native-3D flag have been read. Until then nothing may be drawn: the default Eyes would flash before the avatar. */
+    val loaded: Boolean = false,
 )
 
 /**
@@ -55,7 +59,7 @@ class AvatarCarouselViewModel(
         val req = entry?.let { ModelRequest(it.id, libraryModelUrl(it.id), it.textureCap) }
         val carousel = FaceCarousel(entries)
         val next = if (entry != null && shown == entry.id) carousel.stageTarget(slot)?.takeIf { files.modelPath(it.id) != null && StagingPolicy.shouldStage(entry, it, lowMemory()) } else null
-        CarouselUi(slot, req, next?.let { ModelRequest(it.id, libraryModelUrl(it.id), it.textureCap) }, ready = req != null && shown != null, slotCount = carousel.slots.size, nativeDisabled = off == true)
+        CarouselUi(slot, req, next?.let { ModelRequest(it.id, libraryModelUrl(it.id), it.textureCap) }, ready = req != null && shown != null, slotCount = carousel.slots.size, nativeDisabled = off == true, loaded = off != null)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CarouselUi())
 
     init {
@@ -65,6 +69,15 @@ class AvatarCarouselViewModel(
     }
 
     fun swipeNext() { viewModelScope.launch { cycle() } }
+
+    /**
+     * Moves to the next face and returns once it is on screen (an avatar has reported it is shown, or the slot is Eyes), or after [timeoutMs].
+     * The swipe animation waits for this so the new face slides in instead of the old one coming back and then jumping.
+     */
+    suspend fun swipeNextAndAwait(timeoutMs: Long = 1500) {
+        val next = cycle()
+        withTimeoutOrNull(timeoutMs) { ui.first { u -> u.slot == next && (next !is AvatarSlot.Model || shownKey.value == next.id) } }
+    }
 
     fun onShown(key: String, ms: Long, wasStaged: Boolean) {
         log("swap key=$key ms=$ms staged=$wasStaged")

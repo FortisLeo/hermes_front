@@ -6,6 +6,7 @@ import android.opengl.GLUtils
 import android.os.Trace
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.AlphaMode
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.DrawItem
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.FaceFxLayout
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.Pass
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.PoseDriver
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.RenderPlan
@@ -18,8 +19,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
-/** Quality switches chosen per device. */
-data class EngineConfig(val outlines: Boolean = true, val springs: Boolean = true, val rgb565: Boolean = true)
+/** Quality switches chosen per device. [compressTextures]: use the ETC2 texture cache when it exists (see [ModelCache]). */
+data class EngineConfig(val outlines: Boolean = true, val springs: Boolean = true, val rgb565: Boolean = true, val compressTextures: Boolean = true)
 
 /**
  * A model on the GPU plus its live rig, driver and physics. Create and release on the GL thread only.
@@ -27,6 +28,8 @@ data class EngineConfig(val outlines: Boolean = true, val springs: Boolean = tru
  */
 internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sharedPrograms: ProgramCache? = null) {
     val rig = Rig(asset); val driver = PoseDriver(rig); val springs = SpringSimulation(rig)
+    /** Where blush, tears, sweat and the anger mark sit this frame; the view's [FaceFxRenderer] draws them. */
+    val faceFx = FaceFxLayout(rig)
     val plan: List<DrawItem> = RenderPlan.build(asset, config.outlines)
     val maxJoints = asset.skins.maxOfOrNull { it.joints.size } ?: 0
     private val ownsPrograms = sharedPrograms == null
@@ -130,6 +133,23 @@ internal class GlModel(val asset: VrmAsset, private val config: EngineConfig, sh
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_REPEAT); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_REPEAT)
         GlErrors.check("texture upload $image")
         pendingBytes += bmp.byteCount; texVersion++
+    }
+
+    /**
+     * Upload one image already compressed for the GPU ([format] is an ETC2 format), mip levels from the largest down ([levels] =
+     * width, height, bytes). No decode and no mipmap generation: the levels come straight from the texture cache.
+     */
+    fun uploadCompressed(image: Int, format: Int, levels: List<Triple<Int, Int, ByteBuffer>>) {
+        if (textures[image] != 0) GLES30.glDeleteTextures(1, intArrayOf(textures[image]), 0)
+        val id = IntArray(1); GLES30.glGenTextures(1, id, 0); textures[image] = id[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id[0])
+        GLES30.glTexStorage2D(GLES30.GL_TEXTURE_2D, levels.size, format, levels[0].first, levels[0].second)
+        var bytes = 0
+        for ((i, l) in levels.withIndex()) { GLES30.glCompressedTexSubImage2D(GLES30.GL_TEXTURE_2D, i, 0, 0, l.first, l.second, format, l.third.remaining(), l.third); bytes += l.third.remaining() }
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_NEAREST); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_REPEAT); GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_REPEAT)
+        GlErrors.check("compressed texture upload $image")
+        pendingBytes += bytes; texVersion++
     }
 
     /** Compiles every shader variant this model will draw with (call after the textures are uploaded) so the first frame does not hitch. */

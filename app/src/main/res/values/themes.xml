@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Same near-black as the face background, so launching the app does not flash white before the first frame. -->
+    <color name="face_background">#05070A</color>
 
-    <style name="Theme.Hermes_front_mobile" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Hermes_front_mobile" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/face_background</item>
+    </style>
 </resources>

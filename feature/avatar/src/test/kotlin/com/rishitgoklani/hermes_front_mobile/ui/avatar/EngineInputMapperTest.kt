@@ -5,7 +5,11 @@ import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarKeyframe
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarPose
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.AvatarState
 import com.rishitgoklani.hermes_front_mobile.domain.avatar.Vec3
+import com.rishitgoklani.hermes_front_mobile.domain.face.Effect
 import com.rishitgoklani.hermes_front_mobile.domain.face.Mood
+import com.rishitgoklani.hermes_front_mobile.domain.face.Reaction
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.FaceMixer
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.FaceRecipes
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -34,5 +38,25 @@ class EngineInputMapperTest {
         assertEquals(com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel.Low, renderLevel(com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality.Low))
         assertEquals(com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel.High, renderLevel(com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality.High))
         assertEquals(com.rishitgoklani.hermes_front_mobile.engine.vrmgl.QualityLevel.Auto, renderLevel(com.rishitgoklani.hermes_front_mobile.domain.DisplayQuality.Auto))
+    }
+
+    @Test fun mapsReactionIntensitiesActivityAndEffectsForTheFaceLayer() {
+        val i = EngineInputMapper.input(AvatarState(mood = Mood.Shy, moodIntensity = 0.6f, reaction = Reaction.HeartEyes, reactionIntensity = 0.9f), setOf(Effect.Blush, Effect.Hearts), "Thinking")
+        assertEquals("shy", i.mood); assertEquals(0.6f, i.moodIntensity, 0f); assertEquals("hearteyes", i.reaction); assertEquals(0.9f, i.reactionIntensity, 0f)
+        assertEquals("thinking", i.activity); assertEquals(setOf("blush", "hearts"), i.effects)
+    }
+
+    @Test fun noReactionOrEffectsMapToEmptyValues() {
+        val i = EngineInputMapper.input(AvatarState()); assertEquals("", i.reaction); assertEquals("", i.activity); assertEquals(emptySet<String>(), i.effects)
+    }
+
+    @Test fun everyDomainMoodAndReactionNameResolvesToARecipeOrIsDeliberatelyPlain() {
+        val plainMoods = setOf("neutral"); val plainReactions = setOf("blink", "glance", "lookaround")
+        for (m in Mood.entries) { val n = m.name.lowercase(); assertEquals("mood $n", n in plainMoods, FaceRecipes.moods[n] == null) }
+        for (r in Reaction.entries) { val n = r.name.lowercase(); assertEquals("reaction $n", n in plainReactions, FaceRecipes.reactions[n] == null) }
+    }
+
+    @Test fun engineEffectsAreExactlyTheOnesTheEngineDraws() {
+        assertEquals(FaceMixer.FX_NAMES.toSet(), EngineInputMapper.engineEffects.map { it.name.lowercase() }.toSet())
     }
 }

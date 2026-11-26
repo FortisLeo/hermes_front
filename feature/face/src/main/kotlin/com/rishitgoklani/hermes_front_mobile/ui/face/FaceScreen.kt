@@ -40,7 +40,7 @@ fun FaceScreen(
     modifier: Modifier = Modifier, backgroundColor: Color = Color(0xFF05070A), mouth: Float = 0f, faceContent: (@Composable () -> Unit)? = null,
     overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     /** Swipe right-to-left switches to the next face (eyes / avatars). Null disables the gesture. */
-    onSwipeNext: (() -> Unit)? = null,
+    onSwipeNext: (suspend () -> Unit)? = null,
 ) {
     var panel by remember { mutableStateOf(false) }
     val swipe = remember { SwipeSlide() }

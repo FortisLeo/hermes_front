@@ -21,11 +21,17 @@ interface SlotHost<M : Any> {
 /**
  * Keeps at most two models in memory: the active one and the next one, staged behind it. The caller only states what it wants
  * ([want]); this reconciles loads and frees everything else, so a quick swipe sequence never leaves extra models resident.
- * The staged model is only loaded once the active one is on screen, so the two never decode at the same time, and it is loaded
- * geometry-only: its textures are decoded when it is promoted, while the previous model stays on screen until it is fully ready.
+ * The staged model is only loaded once the active one is on screen, so the two never decode at the same time. When [stageTextures]
+ * says so (enough memory) it is loaded with its textures, so promoting it is a single frame; otherwise it is geometry-only and its
+ * textures are decoded when it is promoted, while the previous model stays on screen until it is fully ready.
  */
-class ModelSlots<M : Any>(private val host: SlotHost<M>, private val now: () -> Long = System::currentTimeMillis) {
-    private class Entry<M>(val key: String, val startedAt: Long, val requestedActive: Boolean) { var model: M? = null; var texturesReady = false; var finishing = false }
+class ModelSlots<M : Any>(
+    private val host: SlotHost<M>,
+    /** Asked each time a staged load starts: may the staged model hold textures too? */
+    private val stageTextures: () -> Boolean = { false },
+    private val now: () -> Long = System::currentTimeMillis,
+) {
+    private class Entry<M>(val key: String, val startedAt: Long, val requestedActive: Boolean, val withTextures: Boolean) { var model: M? = null; var texturesReady = false; var finishing = false }
     private val entries = LinkedHashMap<String, Entry<M>>()
     private var wantActive: String? = null; private var wantStaged: String? = null
     private var activeKey: String? = null
@@ -74,11 +80,11 @@ class ModelSlots<M : Any>(private val host: SlotHost<M>, private val now: () -> 
     }
 
     private fun startLoad(key: String, requestedActive: Boolean) {
-        val e = Entry<M>(key, now(), requestedActive); entries[key] = e
-        host.load(key, withTextures = requestedActive) { r ->
+        val e = Entry<M>(key, now(), requestedActive, requestedActive || stageTextures()); entries[key] = e
+        host.load(key, withTextures = e.withTextures) { r ->
             if (entries[key] !== e) { r.getOrNull()?.let { host.dispose(key, it) }; return@load }   // superseded while loading
             r.onSuccess { m ->
-                e.model = m; e.texturesReady = requestedActive
+                e.model = m; e.texturesReady = e.withTextures
                 if (key == wantActive) reconcile()
                 else if (key == wantStaged) { host.staged(key, now() - e.startedAt); reconcile() }
                 else release(key)

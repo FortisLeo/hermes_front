@@ -51,7 +51,9 @@ class VrmAsset(
     val isVrm0: Boolean, val nodes: List<VrmNode>, val roots: IntArray, val primitives: List<VrmPrimitive>, val materials: List<VrmMaterial>,
     val skins: List<VrmSkin>, val humanoid: Map<String, Int>, val expressions: Map<String, List<ExpressionBind>>,
     val meshTargetCounts: Map<Int, Int>, val images: List<ImageRef>, val springs: List<SpringChain>, val colliders: List<SphereCollider>,
-    val boundsMin: FloatArray, val boundsMax: FloatArray, val expressionMeta: Map<String, ExpressionMeta> = emptyMap(), private val imageBytes: (Int) -> ByteArray,
+    val boundsMin: FloatArray, val boundsMax: FloatArray, val expressionMeta: Map<String, ExpressionMeta> = emptyMap(),
+    /** Morph target names per glTF mesh, when the file carries them (`extras.targetNames`). */
+    val morphTargetNames: Map<Int, List<String>> = emptyMap(), private val imageBytes: (Int) -> ByteArray,
 ) {
     fun imageBytes(image: Int): ByteArray = imageBytes.invoke(images[image].view)
     fun node(name: String): Int = nodes.firstOrNull { it.name == name }?.index ?: -1

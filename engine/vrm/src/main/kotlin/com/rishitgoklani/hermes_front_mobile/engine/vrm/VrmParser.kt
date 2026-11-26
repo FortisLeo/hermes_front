@@ -27,6 +27,8 @@ class VrmFormatException(message: String) : Exception(message)
 /** Turns a GLB/VRM into a compact [VrmAsset]. Pure Kotlin so the whole path is unit-tested on the JVM. */
 object VrmParser {
     const val MAX_JOINTS = 255
+    /** Bump whenever [parse] produces different output for the same file: cached parses ([AssetCache]) made by an older parser are then ignored. */
+    const val OUTPUT_VERSION = 1
 
     fun parse(glb: Glb): VrmAsset {
         val root = glb.json; val acc = Accessors(root, glb.bin)
@@ -54,9 +56,30 @@ object VrmParser {
         val humanoid = parseHumanoid(v0, v1)
         if (humanoid["hips"] == null || humanoid["head"] == null) throw VrmFormatException("Model is missing the hips or head bone")
         val meta = LinkedHashMap<String, ExpressionMeta>()
-        val expressions = parseExpressions(root, v0, v1, nodes, meta)
+        val targetNames = morphTargetNames(root)
+        val expressions = LinkedHashMap(parseExpressions(root, v0, v1, nodes, meta))
+        addBlushFromMorphNames(expressions, meta, targetNames, targetCounts)
         val (chains, colliders) = if (v0 != null) SpringParser.parse(v0, v1, nodes) else SpringParser.parseV1(ext, nodes)
-        return VrmAsset(v0 != null, nodes, roots, prims, materials, skins, humanoid, expressions, targetCounts, images, chains, colliders, bMin, bMax, meta) { view -> acc.viewBytes(view) }
+        return VrmAsset(v0 != null, nodes, roots, prims, materials, skins, humanoid, expressions, targetCounts, images, chains, colliders, bMin, bMax, meta, targetNames) { view -> acc.viewBytes(view) }
+    }
+
+    /** Morph target names per mesh from `mesh.extras.targetNames` (or the same field on a primitive); meshes without names are left out. */
+    internal fun morphTargetNames(root: JsonObject): Map<Int, List<String>> {
+        val out = HashMap<Int, List<String>>()
+        root.a("meshes").forEachIndexed { i, el ->
+            val m = el.obj() ?: return@forEachIndexed
+            val arr = m.o("extras")?.a("targetNames")?.takeIf { it.isNotEmpty() } ?: m.a("primitives").firstNotNullOfOrNull { p -> p.obj()?.o("extras")?.a("targetNames")?.takeIf { it.isNotEmpty() } }
+            if (arr != null) out[i] = arr.map { (it as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "" }
+        }
+        return out
+    }
+
+    /** Many avatars have a blush shape key but no expression for it; expose one named "blush" so the face layer can drive it. */
+    private fun addBlushFromMorphNames(expressions: MutableMap<String, List<ExpressionBind>>, meta: MutableMap<String, ExpressionMeta>, names: Map<Int, List<String>>, targetCounts: Map<Int, Int>) {
+        if (expressions.keys.any { BlushNames.matches(it) }) return
+        val binds = ArrayList<ExpressionBind>()
+        for ((mesh, list) in names) list.forEachIndexed { t, n -> if (t < (targetCounts[mesh] ?: 0) && BlushNames.matches(n)) binds += ExpressionBind(mesh, t, 1f) }
+        if (binds.isNotEmpty()) { expressions["blush"] = binds; meta["blush"] = ExpressionMeta.NONE }
     }
 
     // ---- nodes ----

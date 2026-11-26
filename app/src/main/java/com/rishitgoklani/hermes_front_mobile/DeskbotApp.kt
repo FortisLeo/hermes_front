@@ -113,6 +113,11 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     /** The one way a model becomes an avatar: optimize, store, add to the library, show it. */
     val avatarInstaller: com.rishitgoklani.hermes_front_mobile.domain.avatar.ModelInstaller = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.LibraryInstaller(importAvatar, selectAvatar)
     val avatarSnapshots = com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarSnapshots()
+    val nativeGlSwitch = com.rishitgoklani.hermes_front_mobile.data.avatar.DataStoreNativeGlSwitch.create(app)
+    val avatarPosters = com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarPosters(File(app.cacheDir, "avatar_posters"))
+    /** Poster and model of the saved avatar, prepared as soon as the activity starts (see MainActivity.onCreate). */
+    val avatarStartup by lazy { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarStartup(app, avatarPosters, avatarLibraryDir) }
+    val startupAvatar = com.rishitgoklani.hermes_front_mobile.domain.avatar.library.StartupAvatar(avatarLibrary, avatarSlot, avatarFiles, nativeGlSwitch)
     /** A model proves itself once the viewer showed it and the app survived 20 s; until then a crash marks it BROKEN at the next start. */
     private fun proveLater(id: String) { scope.launch { kotlinx.coroutines.delay(20_000); markProven(id) } }
     val audit = FileAuditLog(File(app.filesDir, "audit.log"))
@@ -306,7 +311,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
                 } else if (!want && isModel) selectAvatar(com.rishitgoklani.hermes_front_mobile.domain.avatar.library.AvatarSlot.Eyes)
             }
         }
-        scope.launch { face.state.collect { avatar.setMood(it.mood); avatar.look(it.lookX, it.lookY) } }
+        scope.launch { face.state.collect { avatar.setFace(it.mood, it.moodIntensity, it.reaction, it.reactionIntensity); avatar.look(it.lookX, it.lookY) } }
         scope.launch { tts.openness.collect { avatar.setMouth(it) } }
     }
     private var sensing = false
@@ -369,7 +374,7 @@ class AppContainer(private val app: Application, val crashLog: com.rishitgoklani
     fun avatarLibraryViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel = vm(owner) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarLibraryViewModel(avatarCatalog, avatarInstaller, avatarLibrary, avatarSlot, selectAvatar, removeAvatar) }
     fun avatarCarouselViewModel(owner: ViewModelStoreOwner): com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel = vm(owner) {
         val am = app.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel(avatarLibrary, avatarSlot, avatarFiles, cycleAvatar, ::proveLater, avatarSnapshots, { android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.lowMemory }, log = { android.util.Log.d("DeskbotAvatar", it) }, nativeGl = com.rishitgoklani.hermes_front_mobile.data.avatar.DataStoreNativeGlSwitch.create(app))
+        com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarCarouselViewModel(avatarLibrary, avatarSlot, avatarFiles, cycleAvatar, ::proveLater, avatarSnapshots, { android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.lowMemory }, log = { android.util.Log.d("DeskbotAvatar", it) }, nativeGl = nativeGlSwitch)
     }
 
     private inline fun <reified T : ViewModel> vm(owner: ViewModelStoreOwner, crossinline create: () -> T): T =
@@ -392,5 +397,10 @@ class DeskbotApp : Application() {
         }
     }
 
-    override fun onCreate() { super.onCreate(); installCrashHandler(); container = AppContainer(this, crashLog); container.startBridge(); container.restorePersona(); container.startSensing() }
+    override fun onCreate() {
+        super.onCreate(); StartupTrace.mark("appOnCreate"); installCrashHandler()
+        container = StartupTrace.span("container") { AppContainer(this, crashLog) }
+        StartupTrace.span("bridge") { container.startBridge() }; container.restorePersona(); StartupTrace.span("sensing") { container.startSensing() }
+        StartupTrace.mark("appReady")
+    }
 }

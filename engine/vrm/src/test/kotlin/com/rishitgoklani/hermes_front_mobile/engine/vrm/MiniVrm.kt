@@ -21,9 +21,9 @@ object MiniVrm {
 
     /** [arms] adds leftUpperArm/leftHand/rightUpperArm/rightHand/leftEye/rightEye (nodes 7..12) in a T-pose, the character's left at +X for VRM 1.0 and -X for VRM 0.x.
      *  [expressions1] replaces the VRM 1.0 expression block; [v0Groups] replaces the VRM 0.x blend shape groups; [shade] gives the VRM 0.x _ShadeShift/_ShadeToony. */
-    fun build(vrm1: Boolean = false, withSprings: Boolean = true, arms: Boolean = false, expressions1: String? = null, v0Groups: String? = null, shade: Pair<Float, Float>? = null, targets: Int = 1, secondPrimitive: Boolean = false): ByteArray {
+    fun build(vrm1: Boolean = false, withSprings: Boolean = true, arms: Boolean = false, expressions1: String? = null, v0Groups: String? = null, shade: Pair<Float, Float>? = null, targets: Int = 1, secondPrimitive: Boolean = false, meshExtras: String = "", positions: FloatArray? = null): ByteArray {
         val bin = Bin()
-        val pos = bin.add(f(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f), 3, 5126, "VEC3")
+        val pos = bin.add(f(*(positions ?: floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f))), 3, 5126, "VEC3")
         val nrm = bin.add(f(0f, 0f, 1f, 0f, 0f, 1f, 0f, 0f, 1f), 3, 5126, "VEC3")
         val uv = bin.add(f(0f, 0f, 1f, 0f, 0f, 1f), 3, 5126, "VEC2")
         val jts = bin.add(byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 3, 5121, "VEC4")
@@ -58,7 +58,7 @@ object MiniVrm {
         val matExt = if (vrm1) """,{"extensions":{"KHR_materials_mtoon":{"shadeColorFactor":[0.1,0.2,0.3],"shadingShiftFactor":0.2,"outlineWidthMode":"worldCoordinates","outlineWidthFactor":0.003}}}""" else ""
         val prim = """{"attributes":{"POSITION":$pos,"NORMAL":$nrm,"TEXCOORD_0":$uv,"JOINTS_0":$jts,"WEIGHTS_0":$wts},"indices":$idx,"material":0,"targets":[${(1..targets).joinToString(",") { """{"POSITION":$morph}""" }}]}"""
         val json = """{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0,6]}],"nodes":$nodes,
-          "meshes":[{"primitives":[$prim${if (secondPrimitive) ",$prim" else ""}]}],
+          "meshes":[{"primitives":[$prim${if (secondPrimitive) ",$prim" else ""}]$meshExtras}],
           "skins":[{"joints":[1],"inverseBindMatrices":$ib}],
           "materials":[{"name":"skin","pbrMetallicRoughness":{"baseColorFactor":[1,1,1,1]},"doubleSided":true}${if (vrm1) matExt.substring(0, 0) else ""}],
           "accessors":[${bin.accessors.joinToString(",")}],"bufferViews":[${bin.views.joinToString(",")}],"buffers":[{"byteLength":${bin.out.size()}}],$ext}"""

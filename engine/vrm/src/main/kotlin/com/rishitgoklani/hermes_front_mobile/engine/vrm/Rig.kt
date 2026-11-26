@@ -183,6 +183,8 @@ class Rig(val asset: VrmAsset) {
 
     fun worldPosition(node: Int, out: FloatArray) { out[0] = world[node * 16 + 12]; out[1] = world[node * 16 + 13]; out[2] = world[node * 16 + 14] }
     fun worldRotation(node: Int, out: FloatArray) { System.arraycopy(wq, node * 4, out, 0, 4) }
+    /** World rotation of [node] in the rest pose; world * inverse(rest) is how far the node has turned from rest. */
+    fun restWorldRotation(node: Int, out: FloatArray) { System.arraycopy(restWorldRot, node * 4, out, 0, 4) }
 
     /** Writes the skinning matrices (world * inverseBind) of skin [skin] into [out], 16 floats per joint. */
     fun jointMatrices(skin: Int, out: FloatArray) {
@@ -197,6 +199,10 @@ class Rig(val asset: VrmAsset) {
     fun setExpression(name: String, value: Float) { val i = exprIndex[name] ?: return; exprRaw[i] = value.coerceIn(0f, 1f) }
     fun setExpression(index: Int, value: Float) { if (index in exprRaw.indices) exprRaw[index] = if (value < 0f) 0f else if (value > 1f) 1f else value }
     fun clearExpressions() { java.util.Arrays.fill(exprRaw, 0f) }
+    /** Raises expression [index] to at least [value] (never lowers it), so layers on top do not wipe what the agent or a clip set. */
+    fun raiseExpression(index: Int, value: Float) { if (index in exprRaw.indices) { val v = if (value > 1f) 1f else value; if (v > exprRaw[index]) exprRaw[index] = v } }
+    /** Every expression name the model has (presets and custom ones). */
+    fun expressionNames(): List<String> = exprNames.asList()
 
     private fun overrideAmount(mode: String, w: Float) = if (mode == "block") (if (w > 0f) 1f else 0f) else if (mode == "blend") w else 0f
 

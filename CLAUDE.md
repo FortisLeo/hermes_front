@@ -3,7 +3,7 @@
 Deskbot: the Android "body" for a Hermes Agent desk robot. Hermes (Termux, tmux, same phone) is the brain; this app senses, speaks, shows a face, and executes phone actions. Specs live in `docs/` (`Tab 1.md` = project plan, `Architecture.md`, `Feature catalog.md`). Read `Architecture.md` before adding a capability.
 
 ## Stack
-Kotlin 2.2, AGP 9.3, Compose (BOM in `gradle/libs.versions.toml`), coroutines/Flow, OkHttp, kotlinx.serialization, DataStore. minSdk 24, target/compile 37. Package root: `com.rishitgoklani.hermes_front_mobile`. All versions go in the version catalog only.
+Kotlin 2.2, AGP 9.3, Compose (BOM in `gradle/libs.versions.toml`), coroutines/Flow, OkHttp, kotlinx.serialization, DataStore. minSdk 24, target/compile 37. Native: `:engine:vrmgl` builds `libvrmtex` (vendored etcpak ETC2 encoder, `src/main/cpp`) with the NDK/CMake versions from the catalog; Gradle downloads them on first build. Package root: `com.rishitgoklani.hermes_front_mobile`. All versions go in the version catalog only.
 
 ## Commands
 - Build: `./gradlew assembleDebug`
@@ -22,7 +22,7 @@ Kotlin 2.2, AGP 9.3, Compose (BOM in `gradle/libs.versions.toml`), coroutines/Fl
 :core:ui                 shared Compose components + theme
 :core:testing            the ONE shared set of fakes/fixtures
 :engine:vrm              pure-Kotlin VRM engine (parser, rig, poses, VRMA, springs, slots); JVM tests
-:engine:vrmgl            OpenGL ES 3.0 renderer + GL view for the VRM engine
+:engine:vrmgl            OpenGL ES 3.0 renderer + GL view for the VRM engine; model/ETC2 texture caches (native encoder)
 ```
 Rules (enforced by Gradle module graph, later Konsist):
 - `:core:domain` imports nothing Android and nothing from other modules.
