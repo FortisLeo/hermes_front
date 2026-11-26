@@ -27,6 +27,8 @@ class VrmFormatException(message: String) : Exception(message)
 /** Turns a GLB/VRM into a compact [VrmAsset]. Pure Kotlin so the whole path is unit-tested on the JVM. */
 object VrmParser {
     const val MAX_JOINTS = 255
+    /** Bump whenever [parse] produces different output for the same file: cached parses ([AssetCache]) made by an older parser are then ignored. */
+    const val OUTPUT_VERSION = 1
 
     fun parse(glb: Glb): VrmAsset {
         val root = glb.json; val acc = Accessors(root, glb.bin)

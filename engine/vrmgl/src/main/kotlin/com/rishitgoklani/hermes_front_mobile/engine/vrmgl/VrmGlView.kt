@@ -44,6 +44,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import com.rishitgoklani.hermes_front_mobile.engine.vrm.TexturePipeline
+import com.rishitgoklani.hermes_front_mobile.engine.vrm.ImageInfo
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -121,6 +122,8 @@ class VrmGlView(
     private fun programCache(): ProgramCache = programs ?: ProgramCache().also { programs = it }
     /** Set by the host: a model parsed and decoded ahead of time (app start) is taken from here instead of being loaded again. */
     var preloader: ModelPreloader? = null
+    /** Set by the host: parsed models and ETC2 textures cached on disk, used when valid and built in the background otherwise. */
+    var cache: ModelCache? = null
     @Volatile private var posterRequest: Pair<Float, (ByteArray?) -> Unit>? = null
     private val specs = HashMap<String, ModelSpec>()
     private var lastWantActive: ModelSpec? = null; private var lastWantStaged: ModelSpec? = null
@@ -180,7 +183,8 @@ class VrmGlView(
     private fun wakeFromAnyThread() { if (Looper.myLooper() == Looper.getMainLooper()) wake() else main.post { wake() } }
 
     private class Op { val cancelled = AtomicBoolean(false); fun check() { if (cancelled.get()) throw CancellationException("cancelled") } }
-    private class Resident(val model: GlModel, val glb: Glb, val spec: ModelSpec) { @Volatile var textureBytes = 0L; @Volatile var op: Op? = null }
+    /** [glb] opens the model file on first use only: a model loaded from the caches never needs it. */
+    private class Resident(val model: GlModel, glbSource: Lazy<Glb>, val spec: ModelSpec) { val glb by glbSource; @Volatile var textureBytes = 0L; @Volatile var op: Op? = null }
     private val loads = ConcurrentHashMap<String, Op>()
     private val residents = ConcurrentHashMap.newKeySet<Resident>()
 
@@ -337,7 +341,7 @@ class VrmGlView(
         val op = Op(); loads.put(key, op)?.cancelled?.set(true)
         if (released || loader.isShutdown) return
         runCatching { loader.execute {
-            var model: GlModel? = null
+            var model: GlModel? = null; var inspectLater = false
             val r = runCatching {
                 op.check()
                 val perf = LoadPerf(if (withTextures) "load" else "stage", key)
@@ -345,14 +349,19 @@ class VrmGlView(
                 val pre = if (withTextures) preloader?.take(spec, config, textureBudgetBytes) else null
                 if (pre != null) perf.put("preloaded", "${pre.bitmaps.size}img/${pre.ms}ms")
                 perf.mark("preloadWait")
-                val glb = pre?.glb ?: Glb.open(spec.file); perf.mark("open"); val asset = pre?.asset ?: VrmParser.parse(glb); perf.mark("parse")
+                // The model file is opened only if something needs it: no parsed cache, or textures to decode from it.
+                val glb = lazy { pre?.glb ?: Glb.open(spec.file) }
+                val cached = if (pre == null) cache?.asset(spec) { view -> glbViewBytes(glb.value, view) } else null
+                val asset = pre?.asset ?: cached ?: VrmParser.parse(glb.value).also { perf.mark("parse") }
+                perf.put("source", when { pre != null -> "preload"; cached != null -> "cache"; else -> "glb" }); perf.mark("asset")
                 perf.put("bytes", spec.file.length()); perf.put("verts", asset.primitives.sumOf { it.vertexCount }); perf.put("prims", asset.primitives.size)
-                (pre?.info ?: runCatching { VrmInspector.inspect(glb) }.getOrNull())?.let { info -> Log.i(TAG, "model $key\n${info.summary()}"); main.post { if (!released) events?.onInfo(key, info) } }
-                perf.mark("inspect")
+                // Inspecting needs the GLB's JSON: do it now only if the file is open anyway, else after the model is shown.
+                if (glb.isInitialized()) { (pre?.info ?: runCatching { VrmInspector.inspect(glb.value) }.getOrNull())?.let { reportInfo(key, it) }; perf.mark("inspect") }
                 val t = LongArray(2)
                 val m = onGl(op, t) { GlModel(asset, config, programCache()) }; model = m; perf.put("gpuWait", t[0]); perf.put("gpuRun", t[1]); perf.mark("gl")
                 m.driver.clipSource = clipSource
                 val res = Resident(m, glb, spec); residents.add(res)
+                inspectLater = !glb.isInitialized()
                 if (withTextures) {
                     loadTextures(res, op, perf, pre); perf.mark("textures")
                     // Compile the shader variants now that the textures exist (before, they were compiled for the untextured
@@ -364,10 +373,17 @@ class VrmGlView(
             }
             r.onFailure { model?.let { m -> queueEvent { runCatching { m.release() } } } }
             main.post { loads.remove(key, op); if (!released) done(r) }
-            // After handing the model over: the face effects' vertex scan, off the render thread and off the load's critical path.
-            r.getOrNull()?.let { res -> val p0 = LoadPerf.nowMs(); runCatching { res.model.faceFx.prepare() }; Log.i(LoadPerf.TAG, "faceFx ${key.take(8)} prepare=${LoadPerf.nowMs() - p0}") }
+            // After handing the model over, off the critical path: the face effects' vertex scan, the model summary if it was loaded
+            // from the cache, and building whatever cache the model is still missing (in the background, a few seconds later).
+            r.getOrNull()?.let { res ->
+                val p0 = LoadPerf.nowMs(); runCatching { res.model.faceFx.prepare() }; Log.i(LoadPerf.TAG, "faceFx ${key.take(8)} prepare=${LoadPerf.nowMs() - p0}")
+                if (inspectLater) runCatching { VrmInspector.inspect(res.glb) }.getOrNull()?.let { reportInfo(key, it) }
+                cache?.schedule(spec, res.model.asset) { res.glb }
+            }
         } }
     }
+
+    private fun reportInfo(key: String, info: VrmInfo) { Log.i(TAG, "model $key\n${info.summary()}"); main.post { if (!released) events?.onInfo(key, info) } }
 
     /** Geometry-only model about to go on screen: decode and upload its textures, still one image at a time. */
     private fun finishTextures(res: Resident, done: (Result<Unit>) -> Unit) {
@@ -387,6 +403,8 @@ class VrmGlView(
     private fun loadTextures(res: Resident, op: Op, perf: LoadPerf? = null, pre: ModelPreloader.Ready? = null) {
         val asset = res.model.asset
         val others = residents.filter { it !== res }.sumOf { it.textureBytes }
+        val packed = if (config.compressTextures) cache?.textures(res.spec)?.takeIf { it.covers(TextureLoader.usedImages(asset)) } else null
+        if (packed != null) { pre?.recycle(); return loadPacked(res, op, perf, packed, others) }
         val plan = TexturePlan.of(res.glb, asset, config.rgb565, res.spec.texCap, TextureBudgeting.availableBytes(textureBudgetBytes, others))
         val ready = pre?.takeIf { it.cap == plan.cap }?.bitmaps; if (pre != null && ready == null) pre.recycle()
         val decodeMs = AtomicLong(); val waitMs = AtomicLong(); val runMs = AtomicLong(); val px = AtomicLong(); val reused = AtomicLong()
@@ -422,6 +440,36 @@ class VrmGlView(
         } finally { ready?.values?.forEach { it.recycle() }; ready?.clear() }
         perf?.put("images", plan.images.size); perf?.put("cap", plan.cap); perf?.put("mpx", "%.1f".format(px.get() / 1e6)); perf?.put("reused", reused.get())
         perf?.put("decode", decodeMs.get()); perf?.put("uploadWait", waitMs.get()); perf?.put("uploadRun", runMs.get())
+    }
+
+    /**
+     * Upload the model's textures straight from the ETC2 cache: nothing to decode, so each image is one GL task. The cap is chosen
+     * from the compressed sizes (1 byte per pixel at most), and each image starts at the mip level that fits it.
+     */
+    private fun loadPacked(res: Resident, op: Op, perf: LoadPerf?, packed: com.rishitgoklani.hermes_front_mobile.engine.vrm.TextureCacheFile.Contents, others: Long) {
+        val used = TextureLoader.usedImages(res.model.asset)
+        val cap = TextureBudgeting.capFor(used.map { val im = packed.images.getValue(it); ImageInfo(im.width, im.height, 1) }, res.spec.texCap, TextureBudgeting.availableBytes(textureBudgetBytes, others))
+        val waitMs = AtomicLong(); val runMs = AtomicLong(); var waited = 0L
+        pipeline.run(used, decode = { it },
+            upload = { img, _, done ->
+                val im = packed.images.getValue(img); val first = im.firstLevelFor(cap); val queued = LoadPerf.nowMs()
+                queue.add {
+                    val s0 = LoadPerf.nowMs(); waitMs.addAndGet(s0 - queued)
+                    try {
+                        if (op.cancelled.get()) done(CancellationException("cancelled"))
+                        else { res.model.uploadCompressed(img, im.glFormat, im.levels.drop(first).map { Triple(it.width, it.height, packed.data(it)) }); res.textureBytes += im.bytesFrom(first); done(null) }
+                    } catch (t: Throwable) { done(t) } finally { runMs.addAndGet(LoadPerf.nowMs() - s0) }
+                }
+                wakeFromAnyThread()
+            },
+            discard = {},
+            abortCheck = {
+                if (op.cancelled.get() || released) { op.cancelled.set(true); throw CancellationException("cancelled") }
+                if (dead) { op.cancelled.set(true); throw IllegalStateException("GL stopped") }
+                if (running) waited += 250
+                if (waited > GL_WAIT_LIMIT_MS) { op.cancelled.set(true); throw IllegalStateException("GL thread did not respond") }
+            })
+        perf?.put("textures", "etc2"); perf?.put("images", used.size); perf?.put("cap", cap); perf?.put("uploadWait", waitMs.get()); perf?.put("uploadRun", runMs.get())
     }
 
     /** Run [block] on the GL thread inside a frame (at most one queued task per frame) and wait for it. Never waits forever. */

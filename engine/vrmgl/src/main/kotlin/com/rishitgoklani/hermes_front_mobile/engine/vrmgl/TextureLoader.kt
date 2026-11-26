@@ -30,6 +30,12 @@ internal object TextureLoader {
     fun storesAs565(withAlpha: Boolean, rgb565: Boolean) = rgb565 && !withAlpha
     fun info(size: Pair<Int, Int>, withAlpha: Boolean, rgb565: Boolean) = ImageInfo(size.first, size.second, if (storesAs565(withAlpha, rgb565)) 2 else 4)
 
+    /** Full-quality ARGB_8888 decode at the size [cap] allows (for building the compressed texture cache). */
+    fun decodeArgb(slice: ByteBuffer, size: Pair<Int, Int>, cap: Int): Bitmap? {
+        val opts = BitmapFactory.Options().apply { inSampleSize = TextureSizing.sampleSize(size.first, size.second, cap); inPreferredConfig = Bitmap.Config.ARGB_8888 }
+        return BitmapFactory.decodeStream(ByteBufferInputStream(slice), null, opts)
+    }
+
     fun decode(slice: ByteBuffer, size: Pair<Int, Int>, cap: Int, withAlpha: Boolean, rgb565: Boolean): Bitmap? {
         val sample = TextureSizing.sampleSize(size.first, size.second, cap)
         if (!storesAs565(withAlpha, rgb565) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

@@ -23,6 +23,9 @@ load d8224ba4 total=383 preloaded=15img/210ms open=0 parse=0 ... gpuWait=4 gpuRu
 - `*Wait` = time a task waited for the GL thread (a frame), `*Run` = time it ran there. `uploadWait`/`uploadRun` are summed over all
   images, which upload in parallel with decoding, so compare `textures=` (wall time) between runs.
 - `preloaded`/`reused`: the model and images were prepared at app start (`AvatarStartup`), so parse and decode were skipped.
+- `source=` where the parsed model came from: `preload` (app start), `cache` (`<key>.geo`, no GLB opened) or `glb` (parsed from the
+  file). `textures=etc2` means the textures were uploaded straight from the ETC2 cache (`<key>.etc2`), with no decoding.
+- `cache <key> geometry=…ms textures=…ms` lines are the background cache builds (a few seconds after a model's first load).
 - `shown … want->shown=` is what a user waits for after a swipe or a bridge call.
 
 ## Gotchas

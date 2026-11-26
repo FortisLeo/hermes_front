@@ -6,7 +6,10 @@
 #    from the activity launch, and logs are read by pid.
 #  - Each run keeps the app alive ~65 s: two deaths within 60 s of start make AvatarSafety switch the app to the eyes face.
 source "$(dirname "$0")/lib.sh"
-RUNS=${1:-3}; fail=0
+RUNS=${1:-3}; fail=0; push_helper
+case "$(call avatar_library '{"action":"list"}')" in
+  *"eyes (showing)"*) echo "FAIL the eyes face is showing: select an avatar first (if you did, AvatarSafety switched to eyes after two quick restarts; wait 60 s and select it again)"; exit 1;;
+esac
 for i in $(seq 1 "$RUNS"); do
   adb shell am force-stop $PKG; sleep 3; PID=$(adb shell pidof $PKG | tr -d '\r')
   FIRST=$(adb shell am start -W -n $PKG/.MainActivity 2>/dev/null | grep TotalTime | tr -dc '0-9')

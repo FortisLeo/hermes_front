@@ -9,9 +9,9 @@ object QualityPresets {
 
     fun resolve(level: QualityLevel, lowRamDevice: Boolean, totalMemBytes: Long): EngineConfig = when (level) {
         // Battery and heat first: no outline pass, no hair/cloth physics, 16-bit textures for opaque images.
-        QualityLevel.Low -> EngineConfig(outlines = false, springs = false, rgb565 = true)
-        // Everything on, full 8-bit textures (memory budgeting still applies, so a big model is shrunk before it is refused).
-        QualityLevel.High -> EngineConfig(outlines = true, springs = true, rgb565 = false)
+        QualityLevel.Low -> EngineConfig(outlines = false, springs = false, rgb565 = true, compressTextures = true)
+        // Everything on, full 8-bit textures, never the ETC2 cache (memory budgeting still applies, so a big model is shrunk before it is refused).
+        QualityLevel.High -> EngineConfig(outlines = true, springs = true, rgb565 = false, compressTextures = false)
         QualityLevel.Auto -> EngineConfig(outlines = !lowRamDevice, springs = true, rgb565 = lowRamDevice || totalMemBytes < FOUR_GB)
     }
 }

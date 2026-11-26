@@ -8,19 +8,19 @@ import java.io.File
  * only means a plain background until the model is up.
  */
 class AvatarPosters(private val dir: File) {
-    /** The file for [key], or null for a key that is not a plain id (never a path). */
-    fun file(key: String): File? = key.takeIf { KEY.matches(it) }?.let { File(dir, "$it.jpg") }
+    /** The file for [key] in one orientation, or null for a key that is not a plain id (never a path). */
+    fun file(key: String, landscape: Boolean): File? = key.takeIf { KEY.matches(it) }?.let { File(dir, "$it.${if (landscape) "land" else "port"}.jpg") }
 
-    /** Written to a temp file first and renamed, so a reader never sees half a JPEG. */
-    fun save(key: String, jpeg: ByteArray): Boolean {
-        val f = file(key) ?: return false
+    /** Written to a temp file first and renamed, so a reader never sees half a JPEG. One poster per orientation: a portrait one stretched onto a landscape screen looks wrong. */
+    fun save(key: String, landscape: Boolean, jpeg: ByteArray): Boolean {
+        val f = file(key, landscape) ?: return false
         if (jpeg.isEmpty()) return false
         return runCatching { dir.mkdirs(); val tmp = File(dir, "${f.name}.tmp"); tmp.writeBytes(jpeg); tmp.renameTo(f) || run { f.delete(); tmp.renameTo(f) } }.getOrDefault(false)
     }
 
-    fun read(key: String): ByteArray? = file(key)?.takeIf { it.isFile }?.let { runCatching { it.readBytes() }.getOrNull() }
+    fun read(key: String, landscape: Boolean): ByteArray? = file(key, landscape)?.takeIf { it.isFile }?.let { runCatching { it.readBytes() }.getOrNull() }
 
-    fun delete(key: String) { file(key)?.delete() }
+    fun delete(key: String) { file(key, false)?.delete(); file(key, true)?.delete() }
 
     private companion object { val KEY = Regex("[A-Za-z0-9_-]{1,80}") }
 }

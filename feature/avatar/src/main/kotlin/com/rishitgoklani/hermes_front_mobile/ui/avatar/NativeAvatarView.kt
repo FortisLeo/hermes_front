@@ -50,7 +50,7 @@ fun AvatarView(
     AndroidView(modifier = modifier.fillMaxSize(), factory = { ctx ->
         VrmGlView(ctx, textureBudgetBytes = deviceTextureBudget(ctx)).also { v ->
             v.clipsDir = File(clipsDir, "clips")
-            v.preloader = startup?.preloader   // clips live in <avatar dir>/clips (the web viewer served them under /model/clips/)
+            v.preloader = startup?.preloader; v.cache = startup?.cache   // clips live in <avatar dir>/clips (the web viewer served them under /model/clips/)
             v.events = object : VrmEvents {
                 override fun onShown(key: String, ms: Long, wasStaged: Boolean) { shownKey = key; ev.value.onShown(key, ms, wasStaged) }
                 override fun onStaged(key: String, ms: Long) = ev.value.onStaged(key, ms)
@@ -70,7 +70,8 @@ fun AvatarView(
     LaunchedEffect(shownKey, view) {
         val key = shownKey ?: return@LaunchedEffect; val v = view ?: return@LaunchedEffect; val store = posters ?: return@LaunchedEffect
         kotlinx.coroutines.delay(2500)
-        v.capturePoster(0.5f) { jpeg -> if (jpeg != null) Thread { store.save(key, jpeg) }.start() }
+        val landscape = v.width > v.height
+        v.capturePoster(0.5f) { jpeg -> if (jpeg != null) Thread { store.save(key, landscape, jpeg) }.start() }
     }
     DisposableEffect(view) {
         val w = view

@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
         // Before any UI exists: decode the saved avatar's poster and start parsing/decoding its model, so the first frame can show
         // the poster and the 3D view only has to upload when it is ready.
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { container.startupAvatar()?.let { p -> container.avatarStartup.start(p.id, p.textureCap); StartupTrace.mark("startupPreloadQueued") } }
+            runCatching { container.startupAvatar()?.let { p -> container.avatarStartup.start(p.id, p.textureCap, landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE); StartupTrace.mark("startupPreloadQueued") } }
         }
         StartupTrace.mark("setContent")
         setContent {
@@ -201,12 +201,12 @@ class MainActivity : ComponentActivity() {
                 val av by container.avatar.state.collectAsStateWithLifecycle(); val carouselUi by carousel.ui.collectAsStateWithLifecycle()
                 val settingsUi by settings.state.collectAsStateWithLifecycle()
                 val renderQuality = settingsUi.displayQuality
-                val startupPoster by container.avatarStartup.poster.collectAsStateWithLifecycle()
+                val startupPosterKey by container.avatarStartup.posterKey.collectAsStateWithLifecycle()
                 androidx.compose.runtime.LaunchedEffect(carouselUi.loaded) { if (carouselUi.loaded) StartupTrace.mark("carouselLoaded") }
                 androidx.compose.runtime.LaunchedEffect(carouselUi.active != null) { if (carouselUi.active != null) StartupTrace.mark("avatarRequested") }
                 // Blush, tears, sweat and anger marks are drawn by the engine on the 3D face; the 2D overlay keeps hearts, sparkles, Zzz and the like.
                 val faceEffects = com.rishitgoklani.hermes_front_mobile.ui.face.EyeStyles.compute(bot, face).effects
-                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) { startupPoster?.let { (_, img) -> androidx.compose.foundation.Image(img, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds) } } })   // saved slot not read yet: draw nothing, so the default eyes never flash
+                FaceScreen(bot, face, actions, mouth = mouth, faceContent = if (!carouselUi.loaded) ({ Box(Modifier.fillMaxSize().background(background)) { com.rishitgoklani.hermes_front_mobile.ui.avatar.AvatarPoster(startupPosterKey, container.avatarPosters, container.avatarStartup) } })   // saved slot not read yet: draw nothing, so the default eyes never flash
                     else if (carouselUi.active != null) ({
                     Box(Modifier.fillMaxSize()) {
                         // A new quality level rebuilds the GL view so the new switches (outlines, physics, texture format) take effect.

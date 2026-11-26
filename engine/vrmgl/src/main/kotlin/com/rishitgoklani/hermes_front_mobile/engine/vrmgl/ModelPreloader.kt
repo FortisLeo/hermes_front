@@ -19,8 +19,11 @@ import java.util.concurrent.TimeUnit
  * UI is still being built), so the view only has to upload to the GPU. One model at a time; what is not taken by the view within
  * [TTL_MS] is freed. The view checks that the preload matches its own settings and ignores it otherwise.
  */
-class ModelPreloader(private val config: EngineConfig, private val textureBudgetBytes: Long, private val decodeLimitBytes: Long = 24L * 1024 * 1024) {
-    internal class Ready(val spec: ModelSpec, val glb: Glb, val asset: VrmAsset, val info: VrmInfo?, val cap: Int, val bitmaps: ConcurrentHashMap<Int, Bitmap>, val ms: Long) {
+class ModelPreloader(
+    private val config: EngineConfig, private val textureBudgetBytes: Long, private val cache: ModelCache? = null, private val decodeLimitBytes: Long = 24L * 1024 * 1024,
+) {
+    /** [glb] is null when the model came from the cache and its textures are in the ETC2 cache: the file was never opened. */
+    internal class Ready(val spec: ModelSpec, val glb: Glb?, val asset: VrmAsset, val info: VrmInfo?, val cap: Int, val bitmaps: ConcurrentHashMap<Int, Bitmap>, val ms: Long) {
         fun recycle() { bitmaps.values.forEach { it.recycle() }; bitmaps.clear() }
     }
 
@@ -46,7 +49,13 @@ class ModelPreloader(private val config: EngineConfig, private val textureBudget
 
     private fun work(spec: ModelSpec): Ready {
         val t0 = LoadPerf.nowMs()
-        val glb = Glb.open(spec.file); val asset = VrmParser.parse(glb); val info = runCatching { VrmInspector.inspect(glb) }.getOrNull()
+        val cached = cache?.asset(spec) { view -> glbViewBytes(Glb.open(spec.file), view) }
+        val packed = config.compressTextures && cached != null && cache?.textures(spec)?.covers(TextureLoader.usedImages(cached)) == true
+        if (cached != null && packed) {   // everything is cached: nothing to decode, the view uploads straight from the cache
+            Log.i(LoadPerf.TAG, "preload ${spec.key.take(8)} took=${LoadPerf.nowMs() - t0} cached")
+            return Ready(spec, null, cached, null, -1, ConcurrentHashMap(), LoadPerf.nowMs() - t0)
+        }
+        val glb = Glb.open(spec.file); val asset = cached ?: VrmParser.parse(glb); val info = runCatching { VrmInspector.inspect(glb) }.getOrNull()
         val plan = TexturePlan.of(glb, asset, config.rgb565, spec.texCap, TextureBudgeting.availableBytes(textureBudgetBytes, 0))
         val bitmaps = ConcurrentHashMap<Int, Bitmap>(); var bytes = 0L
         for (img in plan.images) {
